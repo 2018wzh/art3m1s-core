@@ -39,18 +39,22 @@ serde_json = "1.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # 字体光栅化（字形渲染子系统）
 ab_glyph = "0.2"
-
-[target.'cfg(target_os = "ios")'.dependencies]
-asb-interpreter = { path = "crates/asb-interpreter", default-features = false, features = ["backend-luau"] }
+# Lua backend selection moved to features (backend-lua51 / backend-luau).
+asb-interpreter = { path = "crates/asb-interpreter", default-features = false }
 
 [target.'cfg(any(target_os = "android", target_os = "ios", all(target_os = "macos", target_arch = "aarch64")))'.dependencies]
 ctt-astcenc = "0.5"
 
-[target.'cfg(not(target_os = "ios"))'.dependencies]
-asb-interpreter = { path = "crates/asb-interpreter", default-features = false, features = ["backend-lua51"] }
-
 [features]
-default = ["gl-backend", "metal-backend", "vulkan-backend", "experimental-eluna", "rfvp-engine", "krkr-engine"]
+# The Lua backend moved from a target-specific dependency to a feature so a
+# host workspace can unify mlua on a single backend (astra-hosted): Lua 5.1
+# stays the default for upstream desktop/Android builds, and `backend-luau`
+# (the former iOS path) lets builds that already ship mlua/luau avoid the
+# mutually exclusive backend collision. iOS builders must now pass
+# `--no-default-features` with `backend-luau` plus the wanted render features.
+default = ["gl-backend", "metal-backend", "vulkan-backend", "experimental-eluna", "rfvp-engine", "krkr-engine", "backend-lua51"]
+backend-lua51 = ["asb-interpreter/backend-lua51"]
+backend-luau = ["asb-interpreter/backend-luau"]
 gl-backend = ["art3m1s-render/gl"]
 metal-backend = ["runtime-shader", "art3m1s-render/metal"]
 vulkan-backend = ["runtime-shader", "art3m1s-render/vulkan"]
