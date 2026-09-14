@@ -646,6 +646,22 @@ impl CoreRuntime {
         format!("script={script} line={line} wait={wait}")
     }
 
+    /// Host-driven wake for a bare `[stop]` wait (astra-hosted).
+    ///
+    /// Mirrors the documented `setScriptStatus(0)` wake: clear the current
+    /// wait and step past the instruction that triggered it. Scenario
+    /// mainloops that park on a bare stop and poll `isDecide` from Lua rely
+    /// on the host decide edge reaching them; headless drivers replay that
+    /// decide through this entry point instead of poking engine internals.
+    /// A no-op unless the runtime is parked on a stop without a named
+    /// reason; named stops (video/trans/tween/menu) keep their own release
+    /// conditions.
+    pub fn host_decide_wake(&mut self) {
+        if matches!(self.wait_reason.as_ref(), Some(WaitReason::Stop { reason: None })) {
+            self.advance_wait_line();
+        }
+    }
+
     /// Host debug snapshot of the interpreter's queued tag list
     /// (astra-hosted). Reveals tags parked behind a stop wait, such as the
     /// jump a title-menu handler enqueues; diagnostic only.
