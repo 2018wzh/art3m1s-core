@@ -629,6 +629,23 @@ impl CoreRuntime {
         self.profiler.submit(*profile);
     }
 
+    /// Host debug snapshot of the current interpreter position and wait
+    /// state (astra-hosted). Heads-off black-box stalls during headless
+    /// family validation; not part of the stable host contract.
+    pub fn debug_wait_state(&self) -> String {
+        let script = self
+            .interpreter
+            .current_script()
+            .unwrap_or("(none)")
+            .to_string();
+        let line = self.interpreter.current_line();
+        let wait = match &self.wait_reason {
+            None => "running".to_string(),
+            Some(reason) => format!("{reason:?}"),
+        };
+        format!("script={script} line={line} wait={wait}")
+    }
+
     pub fn is_exit_requested(&self) -> bool {
         self.exit_requested
             .load(std::sync::atomic::Ordering::SeqCst)
