@@ -646,6 +646,19 @@ impl CoreRuntime {
         format!("script={script} line={line} wait={wait}")
     }
 
+    /// Host debug snapshot of the interpreter's queued tag list
+    /// (astra-hosted). Reveals tags parked behind a stop wait, such as the
+    /// jump a title-menu handler enqueues; diagnostic only.
+    pub fn debug_tag_queue(&self) -> Vec<String> {
+        let ctx = self.interpreter.engine_context();
+        let guard = ctx.lock().unwrap();
+        guard
+            .tag_queue
+            .iter()
+            .map(|(tag, params)| format!("{tag} {params:?}"))
+            .collect()
+    }
+
     pub fn is_exit_requested(&self) -> bool {
         self.exit_requested
             .load(std::sync::atomic::Ordering::SeqCst)
