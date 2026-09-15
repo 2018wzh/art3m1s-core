@@ -2518,6 +2518,51 @@ impl Interpreter {
         &self.lua
     }
 
+    /// 读取并清除 `table.key` 全局标志（astra-hosted）。
+    ///
+    /// Artemis 系统脚本以「Lua 表标志 + 引擎轮询」表达一次决定边沿
+    /// （keyconfig 的 `setexclick` → `flg.exclick`）。返回 true 时已将该键
+    /// 置 nil，避免同一边沿被重复消费。
+    pub fn take_global_flag(&self, table: &str, key: &str) -> bool {
+        let Ok(value) = self.lua.globals().get::<mlua::Value>(table) else {
+            return false;
+        };
+        let mlua::Value::Table(t) = value else {
+            return false;
+        };
+        let Ok(current) = t.get::<mlua::Value>(key) else {
+            return false;
+        };
+        if current == mlua::Value::Nil {
+            return false;
+        }
+        t.set(key, mlua::Value::Nil).is_ok()
+    }
+
+    /// 清除 `table.key` 全局标志（astra-hosted）。
+    ///
+    /// 与 [`Interpreter::take_global_flag`] 同一 mlua 访问模式；供宿主在
+    /// 场景切换吞掉按钮 out 事件后清理残留的悬停状态。
+    pub fn clear_global_key(&self, table: &str, key: &str) {
+        let Ok(value) = self.lua.globals().get::<mlua::Value>(table) else {
+            return;
+        };
+        let mlua::Value::Table(t) = value else {
+            return;
+        };
+        let _ = t.set(key, mlua::Value::Nil);
+    }
+
+    /// Host debug read of a Lua table field (astra-hosted).
+    pub fn read_global_value(&self, table: &str, key: &str) -> Option<String> {
+        let value = self.lua.globals().get::<mlua::Value>(table).ok()?;
+        let mlua::Value::Table(t) = value else {
+            return None;
+        };
+        let current = t.get::<mlua::Value>(key).ok()?;
+        Some(format!("{current:?}"))
+    }
+
     /// 获取 Lua 上下文的可变引用
     pub fn lua_mut(&mut self) -> &mut Lua {
         &mut self.lua

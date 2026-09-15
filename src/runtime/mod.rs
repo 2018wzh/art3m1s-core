@@ -481,7 +481,40 @@ impl CoreRuntime {
         self.finish_profile_frame(&mut profile);
     }
 
+    /// astra-hosted: consume the keyconfig layer's exclick decide edge.
+    ///
+    /// The game's push handler signals an accepted click by setting
+    /// `flg.exclick` (keyconfig.lua `setexclick`); scenario click waits
+    /// parked on a plain `[@]`/bare stop are released once that flag
+    /// appears. The flag is consumed here so one edge wakes exactly one
+    /// wait.
+    fn poll_exclick_wake(&mut self) {
+        let parked = matches!(
+            self.wait_reason.as_ref(),
+            Some(WaitReason::Generic) | Some(WaitReason::Stop { reason: None })
+        );
+        if !parked {
+            return;
+        }
+        if self.interpreter.take_global_flag("flg", "exclick") {
+            self.advance_wait_line();
+        }
+    }
+
+    /// Clear a Lua global table key (astra-hosted). Host drivers use this
+    /// to drop stale button-hover state (`btn.cursor`) after a scene change
+    /// deleted the hovered layers without firing their out handlers.
+    pub fn clear_global_key(&self, table: &str, key: &str) {
+        self.interpreter.clear_global_key(table, key);
+    }
+
+    /// Host debug read of a Lua global table key (astra-hosted).
+    pub fn debug_global_flag(&self, table: &str, key: &str) -> Option<String> {
+        self.interpreter.read_global_value(table, key)
+    }
+
     fn advance_logic(&mut self, delta_ms: u64, profile: &mut crate::profiler::FrameProfile) {
+        self.poll_exclick_wake();
         let logic_started = profile.mark();
         self.interpreter.begin_frame();
         let input_started = profile.mark();
