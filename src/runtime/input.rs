@@ -1218,8 +1218,17 @@ fn enqueue_input_handler(
     runtime_params: &[(&str, &str)],
 ) -> HandlerDispatch {
     let Some(h) = compositor.get_input_handler(event_name, key) else {
+        if std::env::var("ASB_TRACE_TAGS").is_ok() {
+            eprintln!("[PUSH-DISPATCH] {event_name}/{key}: no handler registered");
+        }
         return HandlerDispatch::default();
     };
+    if std::env::var("ASB_TRACE_TAGS").is_ok() {
+        eprintln!(
+            "[PUSH-DISPATCH] {event_name}/{key}: handler found, filter={:?}, handler_fn={:?}, file={:?}, label={:?}",
+            h.filter_params, h.handler, h.file, h.label
+        );
+    }
     let filter_name = format!("seton{event_name}");
     dispatch_handler(
         interpreter,

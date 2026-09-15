@@ -1911,6 +1911,9 @@ impl Interpreter {
             };
 
             // 获取 handler 并执行
+            if std::env::var("ASB_TRACE_TAGS").is_ok() {
+                eprintln!("[TAG] {}:{} {}", script_name, current_line, instruction.tag);
+            }
             if let Some(handler) = self.tag_registry.get(&instruction.tag) {
                 let result = handler.execute(&mut ctx)?;
                 if instruction.get(crate::lua_engine::MESSAGE_LAYER_STATE_PREAPPLIED) != Some("1") {
@@ -2553,13 +2556,19 @@ impl Interpreter {
         let _ = t.set(key, mlua::Value::Nil);
     }
 
-    /// Host debug read of a Lua table field (astra-hosted).
+    /// Host debug read of a Lua table field, walking dotted segments
+    /// (astra-hosted).
     pub fn read_global_value(&self, table: &str, key: &str) -> Option<String> {
-        let value = self.lua.globals().get::<mlua::Value>(table).ok()?;
-        let mlua::Value::Table(t) = value else {
+        let Ok(root) = self.lua.globals().get::<mlua::Value>(table) else {
             return None;
         };
-        let current = t.get::<mlua::Value>(key).ok()?;
+        let mut current = root;
+        for segment in key.split('.') {
+            let mlua::Value::Table(t) = current else {
+                return None;
+            };
+            current = t.get::<mlua::Value>(segment).ok()?;
+        }
         Some(format!("{current:?}"))
     }
 
