@@ -699,7 +699,8 @@ fn select_physical_device(instance: &Instance) -> Result<(vk::PhysicalDevice, u3
                 let score = match props.device_type {
                     vk::PhysicalDeviceType::DISCRETE_GPU => 3,
                     vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
-                    _ => 1,
+                    vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
+                    _ => continue,
                 };
                 choices.push((score, physical, index as u32));
                 break;

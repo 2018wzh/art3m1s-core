@@ -64,3 +64,5 @@ game-probes = ["gl-backend"]
 [dev-dependencies]
 # 离屏像素回读测试需要在 macOS 上创建一个 CGL headless 上下文。
 glow = "0.16"
+
+[workspace]
