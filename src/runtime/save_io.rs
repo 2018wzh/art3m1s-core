@@ -315,6 +315,16 @@ impl CoreRuntime {
         data.restore(&mut self.interpreter)
             .map_err(|e| format!("恢复存档状态失败: {e:?}"))?;
 
+        // Bind the saved input wait before onLoad can enter a different script
+        // frame. Holding it afterwards would suspend the onLoad child instead.
+        let waiting = match data.waiting_for_input {
+            Some(value) => value,
+            None => saved_position_resumes_input_wait(&self.interpreter),
+        };
+        if waiting {
+            self.interpreter.hold_queued_input_wait();
+        }
+
         // A reset keeps the Lua VM, but the game's boot flow may have cleared
         // its persistent globals before the next load.  The onLoad handler is
         // allowed to populate these tables from the restored variables, yet
@@ -355,16 +365,11 @@ impl CoreRuntime {
             self.compositor.apply_event(&event);
         }
 
-        let waiting = match data.waiting_for_input {
-            Some(value) => value,
-            None => saved_position_resumes_input_wait(&self.interpreter),
-        };
         self.pending_message_text = data.message_text.clone();
         if waiting {
             // Saved click-waits snapshot the PC after the queued `@`/`[wait]`.
             // Hold that wait so onLoad follow-up can run, then stop before the
             // message macro's post-wait cleanup (rp / text_erase) executes.
-            self.interpreter.hold_queued_input_wait();
             self.pending_load_resume = Some(super::PendingLoadResume {
                 script: data.current_script.clone(),
                 line: data.current_line,
@@ -384,6 +389,7 @@ impl CoreRuntime {
             data.call_stack.len(),
             waiting
         );
+        self.timeline_reset = true;
         Ok(())
     }
 

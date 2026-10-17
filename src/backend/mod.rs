@@ -28,6 +28,11 @@ pub enum BackendSelection {
         any(target_os = "android", target_os = "windows", target_os = "linux")
     ))]
     NativeVulkan,
+    #[cfg(all(
+        feature = "vulkan-backend",
+        any(target_os = "android", target_os = "windows", target_os = "linux")
+    ))]
+    NativeVulkanHardware,
     #[cfg(feature = "gl-backend")]
     ReferenceGl(gl::platform::GfxBackend),
 }
@@ -115,6 +120,17 @@ pub(crate) fn create_backend(
             any(target_os = "android", target_os = "windows", target_os = "linux")
         ))]
         BackendSelection::NativeVulkan => Ok(Box::new(vulkan::VulkanBackend::new(width, height)?)),
+        #[cfg(all(
+            feature = "vulkan-backend",
+            any(target_os = "android", target_os = "windows", target_os = "linux")
+        ))]
+        BackendSelection::NativeVulkanHardware => {
+            Ok(Box::new(vulkan::VulkanBackend::new_with_device_policy(
+                width,
+                height,
+                vulkan::VulkanDevicePolicy::HardwareOnly,
+            )?))
+        }
         #[cfg(feature = "gl-backend")]
         BackendSelection::ReferenceGl(config) => {
             Ok(Box::new(gl::GlBackend::new(config, width, height)?))

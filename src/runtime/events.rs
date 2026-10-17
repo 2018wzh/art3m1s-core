@@ -934,7 +934,9 @@ impl CoreRuntime {
         self.sync_control_status_variables();
 
         self.interpreter.reset_execution_state();
-        self.start_configured_boot()
+        self.start_configured_boot()?;
+        self.timeline_reset = true;
+        Ok(())
     }
 
     // ── 宿主窗口按钮 / 屏幕方向通知 ────────────────────────────────

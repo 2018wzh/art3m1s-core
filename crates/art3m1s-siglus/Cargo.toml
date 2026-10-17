@@ -10,7 +10,7 @@ anyhow = "1"
 art3m1s-render = { path = "../art3m1s-render" }
 art3m1s-media = { path = "../art3m1s-media", optional = true, features = ["ffmpeg"] }
 glam = "0.30"
-siglus_scene_vm = { path = "../../../siglus_rs/crates/siglus_scene_vm" }
+siglus_scene_vm = { git = "https://github.com/Alphaly2K/siglus_rs", rev = "28917920a3e5eeb9a5fa60eac31400422cd41fe2" }
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 
 [features]
