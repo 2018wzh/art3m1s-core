@@ -89,13 +89,24 @@ impl HostResources {
     }
 
     pub fn mount_pfs(&self, path: &Path, encoding: &str) -> Result<(), String> {
+        self.mount_pfs_with_extra(path, encoding, "")
+    }
+
+    /// Mount the normal archive set, then one explicitly selected standalone
+    /// patch relative to the base archive directory. Empty keeps normal behavior.
+    pub fn mount_pfs_with_extra(
+        &self,
+        path: &Path,
+        encoding: &str,
+        extra_archive: &str,
+    ) -> Result<(), String> {
         let previous_save_dir = self
             .files
             .lock()
             .unwrap()
             .as_ref()
             .and_then(|files| files.save_dir.clone());
-        let mut files = mount_pfs_files(path, encoding)?;
+        let mut files = mount_pfs_files(path, encoding, extra_archive)?;
         files.save_dir = previous_save_dir;
         *self.files.lock().unwrap() = Some(files);
         Ok(())
@@ -323,7 +334,7 @@ fn select_pfs_archive_encoding(requested: PfsArchive, utf8: PfsArchive) -> PfsAr
     }
 }
 
-fn mount_pfs_files(path: &Path, encoding: &str) -> Result<HostFiles, String> {
+fn mount_pfs_files(path: &Path, encoding: &str, extra_archive: &str) -> Result<HostFiles, String> {
     let parent = path
         .parent()
         .ok_or_else(|| "PFS path has no parent directory".to_string())?;
@@ -352,6 +363,19 @@ fn mount_pfs_files(path: &Path, encoding: &str) -> Result<HostFiles, String> {
         return Err(format!("no PFS archives under {}", parent.display()));
     }
 
+    let extra = if extra_archive.is_empty() {
+        None
+    } else {
+        let extra = confined_extra_archive(parent, extra_archive)?;
+        for candidate in &candidates {
+            let canonical = fs::canonicalize(candidate)
+                .map_err(|error| format!("resolve archive: {error}"))?;
+            if canonical == extra {
+                return Err("extra archive is already in the active archive set".to_string());
+            }
+        }
+        Some(extra)
+    };
     let encoding = encoding_for(encoding);
     let mut files = empty_files();
     // Some games keep videos and other large assets beside the PFS instead
@@ -392,6 +416,21 @@ fn mount_pfs_files(path: &Path, encoding: &str) -> Result<HostFiles, String> {
             parent.display()
         ));
     }
+    if let Some(extra) = extra {
+        // Unlike automatic byte-volume discovery, an explicit patch is exactly
+        // one file. Native parsing, not its suffix, establishes archive identity.
+        let requested = PfsArchive::open_standalone_with_encoding(&extra, encoding)
+            .map_err(|error| format!("open extra archive: {error}"))?;
+        let archive = if requested_is_utf8 {
+            requested
+        } else {
+            match PfsArchive::open_standalone_with_encoding(&extra, UTF_8) {
+                Ok(utf8) => select_pfs_archive_encoding(requested, utf8),
+                Err(_) => requested,
+            }
+        };
+        files.archives.push(archive);
+    }
 
     // Later archives are patch volumes and win over earlier archives.
     for archive_index in (0..files.archives.len()).rev() {
@@ -412,6 +451,36 @@ fn mount_pfs_files(path: &Path, encoding: &str) -> Result<HostFiles, String> {
         }
     }
     Ok(files)
+}
+
+fn confined_extra_archive(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    if relative.len() > 4096
+        || relative.contains(['\0', ':'])
+        || relative.starts_with(['/', '\\'])
+        || relative.split(['/', '\\']).any(|part| {
+            part.is_empty()
+                || part == "."
+                || part == ".."
+                || part.ends_with(['.', ' '])
+                || part.chars().any(|ch| ch.is_control())
+                || [
+                    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4",
+                    "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+                    "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+                ]
+                .iter()
+                .any(|device| part.split('.').next().unwrap_or("").eq_ignore_ascii_case(device))
+        })
+    {
+        return Err("extra archive must be a bounded root-relative file path".to_string());
+    }
+    let root = fs::canonicalize(root).map_err(|error| format!("resolve archive root: {error}"))?;
+    let path = fs::canonicalize(root.join(relative.replace('\\', "/")))
+        .map_err(|error| format!("resolve extra archive: {error}"))?;
+    if !path.starts_with(&root) || !path.is_file() {
+        return Err("extra archive must be a regular file inside the archive root".to_string());
+    }
+    Ok(path)
 }
 
 fn read_source(
@@ -750,6 +819,114 @@ mod tests {
             out.extend_from_slice(data);
         }
         out
+    }
+
+    #[test]
+    fn explicit_extra_archive_overrides_numeric_patches_without_renaming() {
+        let root = std::env::temp_dir().join(format!("art3m1s-extra-order-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("patches")).unwrap();
+        let base = build_pf6(&[(b"shared", b"base"), (b"base-only", b"unchanged")]);
+        let active = build_pf6(&[(b"shared", b"numeric"), (b"active-only", b"active")]);
+        let extra = build_pf6(&[
+            (b"shared", b"explicit"),
+            ("patch/中文.txt".as_bytes(), b"UTF-8 path"),
+        ]);
+        let archive = root.join("game.pfs");
+        let active_path = root.join("game.pfs.999");
+        let extra_path = root.join("patches/selected.bak");
+        fs::write(&archive, &base).unwrap();
+        fs::write(&active_path, &active).unwrap();
+        fs::write(&extra_path, &extra).unwrap();
+        let resources = HostResources::new();
+        resources.mount_pfs(&archive, "utf-8").unwrap();
+        assert_eq!(resources.read_file("shared").unwrap(), b"numeric");
+        assert!(resources.query_size("patch/中文.txt").unwrap().is_none());
+        resources
+            .mount_pfs_with_extra(&archive, "Shift_JIS", "patches/selected.bak")
+            .unwrap();
+        assert_eq!(resources.read_file("shared").unwrap(), b"explicit");
+        assert_eq!(resources.read_file("base-only").unwrap(), b"unchanged");
+        assert_eq!(resources.read_file("active-only").unwrap(), b"active");
+        assert_eq!(resources.read_file("patch/中文.txt").unwrap(), b"UTF-8 path");
+        resources.mount_pfs_with_extra(&archive, "utf-8", "").unwrap();
+        assert_eq!(resources.read_file("shared").unwrap(), b"numeric");
+        assert_eq!(fs::read(&archive).unwrap(), base);
+        assert_eq!(fs::read(&active_path).unwrap(), active);
+        assert_eq!(fs::read(&extra_path).unwrap(), extra);
+        resources.clear();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn explicit_extra_rejects_unsafe_paths_and_nonarchives_atomically() {
+        let root = std::env::temp_dir().join(format!("art3m1s-extra-reject-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("directory")).unwrap();
+        let archive = root.join("game.pfs");
+        fs::write(&archive, build_pf6(&[(b"shared", b"base")])).unwrap();
+        fs::write(root.join("invalid.bak"), b"not an archive").unwrap();
+        let mut truncated = build_pf6(&[(b"shared", b"truncated")]);
+        truncated.pop();
+        fs::write(root.join("truncated.bak"), truncated).unwrap();
+        let mut oversized_index = build_pf6(&[(b"shared", b"index")]);
+        oversized_index[3..7].copy_from_slice(&u32::MAX.to_le_bytes());
+        fs::write(root.join("oversized.bak"), oversized_index).unwrap();
+        let resources = HostResources::new();
+        resources.mount_pfs(&archive, "utf-8").unwrap();
+        for relative in [
+            "../outside.bak", "/absolute", "\\rooted", "C:drive.bak",
+            "patch:stream", "./invalid.bak", "a//b", "a\\..\\b",
+            "NUL.bak", "COM1", "trailing. ", "nul\0name", "directory",
+            "missing.bak", "invalid.bak", "truncated.bak", "oversized.bak", "game.pfs",
+        ] {
+            assert!(resources.mount_pfs_with_extra(&archive, "utf-8", relative).is_err());
+            assert_eq!(resources.read_file("shared").unwrap(), b"base");
+        }
+        assert!(resources
+            .mount_pfs_with_extra(&archive, "utf-8", &"a".repeat(4097))
+            .is_err());
+        resources.clear();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn explicit_extra_does_not_discover_unselected_byte_volumes() {
+        let root = std::env::temp_dir().join(format!("art3m1s-extra-single-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let archive = root.join("game.pfs");
+        fs::write(&archive, build_pf6(&[(b"shared", b"base")])).unwrap();
+        let mut extra = build_pf6(&[(b"shared", b"patch")]);
+        let tail = extra.split_off(extra.len() - 2);
+        fs::write(root.join("selected.bak"), extra).unwrap();
+        fs::write(root.join("selected.bak.000"), tail).unwrap();
+        let resources = HostResources::new();
+        resources.mount_pfs(&archive, "utf-8").unwrap();
+        assert!(resources
+            .mount_pfs_with_extra(&archive, "utf-8", "selected.bak")
+            .is_err());
+        assert_eq!(resources.read_file("shared").unwrap(), b"base");
+        resources.clear();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_extra_rejects_symlink_escape() {
+        let root = std::env::temp_dir().join(format!("art3m1s-extra-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("game")).unwrap();
+        fs::write(root.join("outside.bak"), build_pf6(&[(b"shared", b"outside")])).unwrap();
+        let archive = root.join("game/game.pfs");
+        fs::write(&archive, build_pf6(&[(b"shared", b"base")])).unwrap();
+        std::os::unix::fs::symlink(root.join("outside.bak"), root.join("game/escape.bak")).unwrap();
+        let resources = HostResources::new();
+        assert!(resources
+            .mount_pfs_with_extra(&archive, "utf-8", "escape.bak")
+            .is_err());
+        assert!(!resources.is_mounted());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
