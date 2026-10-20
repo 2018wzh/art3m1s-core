@@ -122,10 +122,18 @@ unsafe fn free_avio(avio: *mut ffmpeg::ffi::AVIOContext) {
     }
     let buffer = unsafe { (*avio).buffer };
     if !buffer.is_null() {
-        unsafe { ffmpeg::ffi::av_freep(buffer.cast()) };
+        unsafe { ffmpeg::ffi::av_freep(std::ptr::addr_of_mut!((*avio).buffer).cast()) };
     }
     let mut avio = avio;
     unsafe { ffmpeg::ffi::avio_context_free(&mut avio) };
+}
+
+struct OwnedAvio(*mut ffmpeg::ffi::AVIOContext);
+
+impl Drop for OwnedAvio {
+    fn drop(&mut self) {
+        unsafe { free_avio(self.0) };
+    }
 }
 
 fn initialize() {
@@ -178,6 +186,8 @@ pub struct FfmpegVideoDecoder {
     frame_rate: Option<Rational>,
     info: VideoStreamInfo,
     eof: bool,
+    // Fields drop in declaration order: input must close before its custom IO.
+    _avio: OwnedAvio,
     _source: Box<Arc<dyn MediaSource>>,
     _io_state: Box<SourceIoState>,
 }
@@ -219,10 +229,10 @@ impl FfmpegVideoDecoder {
             unsafe { ffmpeg::ffi::av_free(avio_buffer.cast()) };
             return Err("unable to allocate AVIO context".to_string());
         }
+        let avio_owner = OwnedAvio(avio);
 
         let mut format = unsafe { ffmpeg::ffi::avformat_alloc_context() };
         if format.is_null() {
-            unsafe { free_avio(avio) };
             return Err("unable to allocate format context".to_string());
         }
         unsafe {
@@ -239,7 +249,6 @@ impl FfmpegVideoDecoder {
             )
         };
         if open_result < 0 {
-            unsafe { free_avio(avio) };
             return Err(Error::from(open_result).to_string());
         }
 
@@ -291,6 +300,7 @@ impl FfmpegVideoDecoder {
             frame_rate: (rate.numerator() > 0 && rate.denominator() > 0).then_some(rate),
             info,
             eof: false,
+            _avio: avio_owner,
             _source: source_box,
             _io_state: io_state,
         })
@@ -587,9 +597,9 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         unsafe { ffmpeg::ffi::av_free(avio_buffer.cast()) };
         return Err("unable to allocate audio AVIO context".to_string());
     }
+    let avio_owner = OwnedAvio(avio);
     let mut format = unsafe { ffmpeg::ffi::avformat_alloc_context() };
     if format.is_null() {
-        unsafe { free_avio(avio) };
         return Err("unable to allocate audio format context".to_string());
     }
     unsafe {
@@ -600,7 +610,6 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         ffmpeg::ffi::avformat_open_input(&mut format, ptr::null(), ptr::null_mut(), ptr::null_mut())
     };
     if open_result < 0 {
-        unsafe { free_avio(avio) };
         return Err(Error::from(open_result).to_string());
     }
     let stream_info_result =
@@ -722,7 +731,9 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         output_layout.channels() as u16,
     )?;
     writer.flush().map_err(|error| error.to_string())?;
-    let _ = (source_box, io_state);
+    drop(input);
+    drop(avio_owner);
+    drop((source_box, io_state));
     Ok(true)
 }
 
@@ -861,5 +872,15 @@ mod tests {
         );
         assert_eq!(frame.info.planes[2].offset, 16 * 16 + 8 * 8);
         assert_eq!(frame.pixels.len(), 16 * 16 + 2 * 8 * 8);
+    }
+
+    #[test]
+    fn opening_then_stopping_video_releases_its_source() {
+        let source = Arc::new(BytesSource(base64_decode(ONE_FRAME_MPEG_BASE64)));
+        let weak = Arc::downgrade(&source);
+        let decoder = FfmpegVideoDecoder::open(source).unwrap();
+        assert_eq!((decoder.info().width, decoder.info().height), (16, 16));
+        drop(decoder);
+        assert!(weak.upgrade().is_none());
     }
 }
