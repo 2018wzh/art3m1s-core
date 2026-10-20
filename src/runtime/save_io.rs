@@ -739,14 +739,20 @@ mod tests {
     };
     use asb_interpreter::{Interpreter, InterpreterConfig};
 
-    #[cfg(feature = "vulkan-backend")]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "android"
+    ))]
     #[test]
-    #[ignore = "requires a Vulkan GPU"]
+    #[ignore = "requires a native GPU"]
     fn load_wait_stays_on_saved_frame_when_onload_calls_a_helper() {
         use asb_interpreter::{Event, ExecutionResult, Value, event::WaitReason};
 
         let mut runtime =
-            super::CoreRuntime::create(64, 64, crate::backend::BackendSelection::NativeVulkan)
+            super::CoreRuntime::create(64, 64, crate::backend::BackendSelection::PlatformDefault)
                 .unwrap();
         runtime
             .interpreter

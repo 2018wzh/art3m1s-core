@@ -7,9 +7,11 @@
 ### 修复
 
 - 读档在执行 `onLoad` 前绑定保存位置的点击等待，避免回调调用辅助脚本后把等待错误绑定到辅助脚本；回调可完成，保存位置仍等待下一次输入。
+- `onLoad` 重写脚本栈时，若保存帧及其调用链仍被保留，则保留对应的点击等待；替换掉保存帧时丢弃该等待。
 
 ### 变更
 
+- 默认 feature 仅启用 `gl-backend`；macOS/iOS 自动编译 Metal，Windows/Linux/Android 自动编译 Vulkan。
 - core 动态库只导出 `art3m1s_get_api_v1`；原有 `art3m1s_*` 平铺符号全部退出动态库导出面。对象操作通过不透明句柄，像素/blob/字符串数据继续使用裸指针加长度。
 - 移除实验性 Eluna E-Mote 后端：删除 `crates/eluna`、`src/runtime/emote/eluna*.rs`、
   `emote_parity_probe` 工具与函数表槽位 `runtime_set_emote_backend`。E-Mote 统一由内置
