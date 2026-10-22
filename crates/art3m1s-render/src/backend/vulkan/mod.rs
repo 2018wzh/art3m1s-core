@@ -15,6 +15,24 @@ const FRAMES_IN_FLIGHT: usize = 2;
 const MAX_DRAW_SETS: u32 = 8192;
 const SCRATCH_INITIAL: usize = 2 * 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VulkanDevicePolicy {
+    Any,
+    HardwareOnly,
+}
+
+impl VulkanDevicePolicy {
+    fn score(self, device_type: vk::PhysicalDeviceType) -> Option<u8> {
+        match device_type {
+            vk::PhysicalDeviceType::DISCRETE_GPU => Some(3),
+            vk::PhysicalDeviceType::INTEGRATED_GPU => Some(2),
+            vk::PhysicalDeviceType::VIRTUAL_GPU => Some(1),
+            _ if self == Self::Any => Some(1),
+            _ => None,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Vertex {
@@ -289,6 +307,14 @@ pub struct VulkanBackend {
 
 impl VulkanBackend {
     pub fn new(width: u32, height: u32) -> Result<Self, String> {
+        Self::new_with_device_policy(width, height, VulkanDevicePolicy::Any)
+    }
+
+    pub fn new_with_device_policy(
+        width: u32,
+        height: u32,
+        policy: VulkanDevicePolicy,
+    ) -> Result<Self, String> {
         if width == 0 || height == 0 {
             return Err("Vulkan stage extent must be non-zero".into());
         }
@@ -309,7 +335,7 @@ impl VulkanBackend {
         let instance = unsafe { entry.create_instance(&create, None) }
             .map_err(|e| format!("create Vulkan instance: {e}"))?;
         let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
-        let (physical, queue_family) = select_physical_device(&instance)?;
+        let (physical, queue_family) = select_physical_device(&instance, policy)?;
         let memory = unsafe { instance.get_physical_device_memory_properties(physical) };
         let uniform_align = unsafe { instance.get_physical_device_properties(physical) }
             .limits
@@ -677,7 +703,10 @@ fn create_sampler(device: &Device, filter: vk::Filter) -> Result<vk::Sampler, St
     .map_err(|e| format!("create Vulkan sampler: {e}"))
 }
 
-fn select_physical_device(instance: &Instance) -> Result<(vk::PhysicalDevice, u32), String> {
+fn select_physical_device(
+    instance: &Instance,
+    policy: VulkanDevicePolicy,
+) -> Result<(vk::PhysicalDevice, u32), String> {
     let devices = unsafe { instance.enumerate_physical_devices() }
         .map_err(|e| format!("enumerate Vulkan devices: {e}"))?;
     let mut choices = Vec::new();
@@ -696,10 +725,8 @@ fn select_physical_device(instance: &Instance) -> Result<(vk::PhysicalDevice, u3
             .enumerate()
         {
             if q.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                let score = match props.device_type {
-                    vk::PhysicalDeviceType::DISCRETE_GPU => 3,
-                    vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
-                    _ => 1,
+                let Some(score) = policy.score(props.device_type) else {
+                    continue;
                 };
                 choices.push((score, physical, index as u32));
                 break;
@@ -3980,6 +4007,20 @@ fn preferred_swapchain_image_count(min_image_count: u32, max_image_count: u32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_policy_preserves_default_ranking_and_filters_hardware() {
+        use vk::PhysicalDeviceType as Type;
+        for policy in [VulkanDevicePolicy::Any, VulkanDevicePolicy::HardwareOnly] {
+            assert_eq!(policy.score(Type::DISCRETE_GPU), Some(3));
+            assert_eq!(policy.score(Type::INTEGRATED_GPU), Some(2));
+            assert_eq!(policy.score(Type::VIRTUAL_GPU), Some(1));
+        }
+        for kind in [Type::CPU, Type::OTHER, Type::from_raw(99)] {
+            assert_eq!(VulkanDevicePolicy::Any.score(kind), Some(1));
+            assert_eq!(VulkanDevicePolicy::HardwareOnly.score(kind), None);
+        }
+    }
 
     #[test]
     fn pipeline_key_separates_required_vulkan_state() {

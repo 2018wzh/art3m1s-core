@@ -11,7 +11,7 @@ anyhow = { version = "1", optional = true }
 glam = "0.30"
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 log = { version = "0.4.20", optional = true, default-features = false, features = ["std"] }
-rfvp = { path = "../../../rfvp/crates/rfvp", default-features = false, features = ["external-renderer"], optional = true }
+rfvp = { git = "https://github.com/Alphaly2K/rfvp", rev = "ec204312e123b4839cec8e69e6237fb0374e5518", default-features = false, features = ["external-renderer"], optional = true }
 
 [features]
 default = []

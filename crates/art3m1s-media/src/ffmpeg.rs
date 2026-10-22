@@ -17,12 +17,18 @@ use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::ptr;
-use std::sync::{Arc, Once};
+use std::sync::{
+    Arc, LazyLock,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 const AVIO_BUFFER_SIZE: usize = 64 * 1024;
 
-static INIT: Once = Once::new();
+static INIT: LazyLock<Result<(), String>> = LazyLock::new(|| {
+    ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Error);
+    ffmpeg::init().map_err(|error| format!("FFmpeg initialization failed: {error}"))
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoStreamInfo {
@@ -57,6 +63,7 @@ pub struct YuvVideoFrame {
 struct SourceIoState {
     source: Arc<dyn MediaSource>,
     offset: i64,
+    cancelled: Option<Arc<AtomicBool>>,
 }
 
 impl SourceIoState {
@@ -65,6 +72,13 @@ impl SourceIoState {
     }
 
     fn read(&mut self, output: &mut [u8]) -> Result<usize, String> {
+        if self
+            .cancelled
+            .as_ref()
+            .is_some_and(|stop| stop.load(Ordering::Acquire))
+        {
+            return Err("media operation cancelled".to_string());
+        }
         let read = self.source.read_at(self.offset.max(0) as u64, output)?;
         self.offset = self.offset.saturating_add(read as i64);
         Ok(read)
@@ -122,19 +136,20 @@ unsafe fn free_avio(avio: *mut ffmpeg::ffi::AVIOContext) {
     }
     let buffer = unsafe { (*avio).buffer };
     if !buffer.is_null() {
-        unsafe { ffmpeg::ffi::av_freep(buffer.cast()) };
+        unsafe { ffmpeg::ffi::av_freep(std::ptr::addr_of_mut!((*avio).buffer).cast()) };
     }
     let mut avio = avio;
     unsafe { ffmpeg::ffi::avio_context_free(&mut avio) };
 }
 
-fn initialize() {
-    INIT.call_once(|| {
-        ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Error);
-        if let Err(error) = ffmpeg::init() {
-            eprintln!("ffmpeg-next initialization failed: {error}");
-        }
-    });
+struct OwnedAvio(*mut ffmpeg::ffi::AVIOContext);
+
+impl Drop for OwnedAvio {
+    fn drop(&mut self) {
+        // Custom AVIO is not released by avformat_close_input. The input is
+        // dropped first, while its source and custom IO buffer are still alive.
+        unsafe { free_avio(self.0) };
+    }
 }
 
 fn duration_from_stream(stream: &ffmpeg::format::stream::Stream<'_>) -> Duration {
@@ -179,6 +194,7 @@ pub struct FfmpegVideoDecoder {
     info: VideoStreamInfo,
     eof: bool,
     _source: Box<Arc<dyn MediaSource>>,
+    _avio: OwnedAvio,
     _io_state: Box<SourceIoState>,
 }
 
@@ -195,9 +211,13 @@ impl std::fmt::Debug for FfmpegVideoDecoder {
 
 impl FfmpegVideoDecoder {
     pub fn open(source: Arc<dyn MediaSource>) -> Result<Self, String> {
-        initialize();
+        INIT.clone()?;
         let source_box = Box::new(Arc::clone(&source));
-        let mut io_state = Box::new(SourceIoState { source, offset: 0 });
+        let mut io_state = Box::new(SourceIoState {
+            source,
+            offset: 0,
+            cancelled: None,
+        });
         let io_pointer = (&mut *io_state as *mut SourceIoState).cast::<c_void>();
 
         let avio_buffer = unsafe { ffmpeg::ffi::av_malloc(AVIO_BUFFER_SIZE) }.cast::<u8>();
@@ -219,10 +239,10 @@ impl FfmpegVideoDecoder {
             unsafe { ffmpeg::ffi::av_free(avio_buffer.cast()) };
             return Err("unable to allocate AVIO context".to_string());
         }
+        let avio_owner = OwnedAvio(avio);
 
         let mut format = unsafe { ffmpeg::ffi::avformat_alloc_context() };
         if format.is_null() {
-            unsafe { free_avio(avio) };
             return Err("unable to allocate format context".to_string());
         }
         unsafe {
@@ -239,7 +259,6 @@ impl FfmpegVideoDecoder {
             )
         };
         if open_result < 0 {
-            unsafe { free_avio(avio) };
             return Err(Error::from(open_result).to_string());
         }
 
@@ -292,6 +311,7 @@ impl FfmpegVideoDecoder {
             info,
             eof: false,
             _source: source_box,
+            _avio: avio_owner,
             _io_state: io_state,
         })
     }
@@ -563,10 +583,17 @@ fn checked_plane_len(width: u32, height: u32) -> Result<usize, String> {
 ///
 /// Returning `Ok(false)` means the media contains no decodable audio stream.
 /// The caller owns the output path and is responsible for deleting it.
-pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Result<bool, String> {
-    initialize();
-    let source_box = Box::new(Arc::clone(&source));
-    let mut io_state = Box::new(SourceIoState { source, offset: 0 });
+pub fn decode_audio_to_wav(
+    source: Arc<dyn MediaSource>,
+    output: &Path,
+    cancelled: Arc<AtomicBool>,
+) -> Result<bool, String> {
+    INIT.clone()?;
+    let mut io_state = Box::new(SourceIoState {
+        source,
+        offset: 0,
+        cancelled: Some(Arc::clone(&cancelled)),
+    });
     let io_pointer = (&mut *io_state as *mut SourceIoState).cast::<c_void>();
     let avio_buffer = unsafe { ffmpeg::ffi::av_malloc(AVIO_BUFFER_SIZE) }.cast::<u8>();
     if avio_buffer.is_null() {
@@ -587,9 +614,9 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         unsafe { ffmpeg::ffi::av_free(avio_buffer.cast()) };
         return Err("unable to allocate audio AVIO context".to_string());
     }
+    let avio_owner = OwnedAvio(avio);
     let mut format = unsafe { ffmpeg::ffi::avformat_alloc_context() };
     if format.is_null() {
-        unsafe { free_avio(avio) };
         return Err("unable to allocate audio format context".to_string());
     }
     unsafe {
@@ -600,7 +627,6 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         ffmpeg::ffi::avformat_open_input(&mut format, ptr::null(), ptr::null_mut(), ptr::null_mut())
     };
     if open_result < 0 {
-        unsafe { free_avio(avio) };
         return Err(Error::from(open_result).to_string());
     }
     let stream_info_result =
@@ -635,6 +661,9 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
     let mut data_len = 0u64;
 
     loop {
+        if cancelled.load(Ordering::Acquire) {
+            return Err("audio extraction cancelled".to_string());
+        }
         let mut frame = ffmpeg::frame::Audio::empty();
         match decoder.receive_frame(&mut frame) {
             Ok(()) => {
@@ -674,13 +703,14 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
                     .ok_or_else(|| "audio resampler is unavailable".to_string())?
                     .run(&frame, &mut converted)
                     .map_err(|error| format!("audio resampler run failed: {error}"))?;
-                let samples = converted.plane::<i16>(0);
-                for sample in samples {
+                let samples = converted.plane::<(i16, i16)>(0);
+                for (left, right) in samples {
                     writer
-                        .write_all(&sample.to_le_bytes())
+                        .write_all(&left.to_le_bytes())
+                        .and_then(|_| writer.write_all(&right.to_le_bytes()))
                         .map_err(|error| error.to_string())?;
                 }
-                data_len = data_len.saturating_add((samples.len() * 2) as u64);
+                data_len = data_len.saturating_add((samples.len() * 4) as u64);
             }
             Err(Error::Eof) => break,
             Err(Error::Other { errno }) if errno == libc::EAGAIN => {
@@ -722,7 +752,8 @@ pub fn decode_audio_to_wav(source: Arc<dyn MediaSource>, output: &Path) -> Resul
         output_layout.channels() as u16,
     )?;
     writer.flush().map_err(|error| error.to_string())?;
-    let _ = (source_box, io_state);
+    drop(input);
+    drop(avio_owner);
     Ok(true)
 }
 

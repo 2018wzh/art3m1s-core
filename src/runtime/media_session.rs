@@ -15,12 +15,28 @@ use glam::{Affine2, Vec2};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 pub const FULLSCREEN_VIDEO_TEXTURE: &str = "__video_layer__:__fullscreen__";
 const VIDEO_FRAME_QUEUE_CAPACITY: usize = 3;
 const MAX_DECODE_STEPS_PER_TICK: usize = 4;
+
+struct AudioExtraction {
+    cancelled: Arc<AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for AudioExtraction {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
+        if let Some(worker) = self.worker.take() {
+            if worker.join().is_err() {
+                crate::core_error!("[media] video audio extraction worker panicked");
+            }
+        }
+    }
+}
 
 enum DecodedFrame {
     Yuv(YuvVideoFrame),
@@ -217,7 +233,8 @@ pub struct RuntimeMediaSession {
     fullscreen: Option<VideoPlayback>,
     layers: HashMap<String, VideoPlayback>,
     finished: Vec<Option<String>>,
-    audio_generation: Arc<AtomicU64>,
+    audio_jobs: HashMap<Option<String>, AudioExtraction>,
+    temporary_audio: Vec<PathBuf>,
 }
 
 impl Default for RuntimeMediaSession {
@@ -227,7 +244,8 @@ impl Default for RuntimeMediaSession {
             fullscreen: None,
             layers: HashMap::new(),
             finished: Vec::new(),
-            audio_generation: Arc::new(AtomicU64::new(0)),
+            audio_jobs: HashMap::new(),
+            temporary_audio: Vec::new(),
         }
     }
 }
@@ -251,13 +269,14 @@ impl RuntimeMediaSession {
         loop_play: bool,
     ) -> Result<(), String> {
         let decoder = FfmpegVideoDecoder::open(resources.open_media_source(file)?)?;
+        self.stop_audio(None);
         self.fullscreen = Some(VideoPlayback::new(
             None,
             FULLSCREEN_VIDEO_TEXTURE.to_string(),
             decoder,
             loop_play,
         ));
-        self.start_audio_extraction(resources, file, None, loop_play);
+        self.start_audio_extraction(resources, file, None, loop_play)?;
         Ok(())
     }
 
@@ -269,6 +288,7 @@ impl RuntimeMediaSession {
         loop_play: bool,
     ) -> Result<(), String> {
         let decoder = FfmpegVideoDecoder::open(resources.open_media_source(file)?)?;
+        self.stop_audio(Some(id));
         self.layers.insert(
             id.to_string(),
             VideoPlayback::new(
@@ -278,91 +298,111 @@ impl RuntimeMediaSession {
                 loop_play,
             ),
         );
-        self.start_audio_extraction(resources, file, Some(id.to_string()), loop_play);
+        self.start_audio_extraction(resources, file, Some(id.to_string()), loop_play)?;
         Ok(())
     }
 
     pub fn stop_fullscreen(&mut self) {
-        self.invalidate_audio();
+        self.stop_audio(None);
         self.fullscreen = None;
     }
 
     pub fn stop_layer(&mut self, id: &str) {
-        self.invalidate_audio();
+        self.stop_audio(Some(id));
         self.layers.remove(id);
     }
 
     pub fn stop_all(&mut self) {
-        self.invalidate_audio();
+        let had_audio = !self.audio_jobs.is_empty();
+        self.audio_jobs.clear();
+        if had_audio {
+            crate::host_media::emit(
+                crate::host_media::HostMediaCommandKind::VideoAudioStopAll,
+                crate::host_media::EmptyPayload {},
+            );
+        }
         self.fullscreen = None;
         self.layers.clear();
         self.finished.clear();
     }
 
-    fn invalidate_audio(&self) {
-        self.audio_generation.fetch_add(1, Ordering::SeqCst);
+    fn stop_audio(&mut self, id: Option<&str>) {
+        if let Some(job) = self.audio_jobs.remove(&id.map(str::to_owned)) {
+            // Join before publishing Stop: no extraction may publish Play later.
+            drop(job);
+            crate::host_media::emit(
+                crate::host_media::HostMediaCommandKind::VideoAudioStop,
+                crate::host_media::VideoAudioStop { id },
+            );
+        }
     }
 
     fn start_audio_extraction(
-        &self,
+        &mut self,
         resources: &crate::host_files::HostResources,
         file: &str,
         id: Option<String>,
         loop_play: bool,
-    ) {
+    ) -> Result<(), String> {
         static NEXT_AUDIO_FILE: AtomicU64 = AtomicU64::new(1);
-        let generation = self.audio_generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let current_generation = Arc::clone(&self.audio_generation);
-        let resources = resources.clone();
-        let file = file.to_string();
-        std::thread::spawn(move || {
-            if current_generation.load(Ordering::SeqCst) != generation {
-                return;
-            }
-            let source = match resources.open_media_source(&file) {
-                Ok(source) => source,
-                Err(error) => {
-                    crate::core_debug!(
-                        "[media] video audio source unavailable: file={file} error={error}"
-                    );
+        let source = resources.open_media_source(file)?;
+        let file_id = NEXT_AUDIO_FILE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "art3m1s-video-audio-{}-{file_id}.wav",
+            std::process::id()
+        ));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = Arc::clone(&cancelled);
+        let worker_path = path.clone();
+        let worker_id = id.clone();
+        let worker = std::thread::Builder::new()
+            .name("art3m1s-video-audio".into())
+            .spawn(move || {
+                let result = art3m1s_media::ffmpeg::decode_audio_to_wav(
+                    source,
+                    &worker_path,
+                    Arc::clone(&worker_cancelled),
+                );
+                if worker_cancelled.load(Ordering::Acquire) {
+                    let _ = std::fs::remove_file(&worker_path);
                     return;
                 }
-            };
-            let file_id = NEXT_AUDIO_FILE.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "art3m1s-video-audio-{}-{file_id}.wav",
-                std::process::id()
-            ));
-            match art3m1s_media::ffmpeg::decode_audio_to_wav(source, &path) {
-                Ok(true) => {
-                    if current_generation.load(Ordering::SeqCst) != generation {
-                        let _ = std::fs::remove_file(&path);
-                        return;
+                match result {
+                    Ok(true) => {
+                        if let Some(path) = worker_path.to_str() {
+                            crate::host_media::emit(
+                                crate::host_media::HostMediaCommandKind::VideoAudioPlay,
+                                crate::host_media::VideoAudioPlay {
+                                    id: worker_id.as_deref(),
+                                    path,
+                                    loop_play,
+                                },
+                            );
+                        } else {
+                            crate::core_error!("[media] video audio path is not UTF-8");
+                            let _ = std::fs::remove_file(&worker_path);
+                        }
                     }
-                    if let Some(path) = path.to_str() {
-                        crate::host_media::emit(
-                            crate::host_media::HostMediaCommandKind::VideoAudioPlay,
-                            crate::host_media::VideoAudioPlay {
-                                id: id.as_deref(),
-                                path,
-                                loop_play,
-                            },
-                        );
-                    } else {
-                        let _ = std::fs::remove_file(&path);
+                    Ok(false) => {
+                        let _ = std::fs::remove_file(&worker_path);
+                    }
+                    Err(error) => {
+                        crate::core_error!("[media] video audio decode failed: {error}");
+                        let _ = std::fs::remove_file(&worker_path);
                     }
                 }
-                Ok(false) => {
-                    crate::core_debug!("[media] video has no decodable audio stream: file={file}");
-                }
-                Err(error) => {
-                    crate::core_warn!(
-                        "[media] video audio decode failed: file={file} error={error}"
-                    );
-                    let _ = std::fs::remove_file(PathBuf::from(&path));
-                }
-            }
-        });
+            })
+            .map_err(|error| format!("video audio worker could not start: {error}"))?;
+        self.temporary_audio.retain(|path| path.exists());
+        self.temporary_audio.push(path);
+        self.audio_jobs.insert(
+            id,
+            AudioExtraction {
+                cancelled,
+                worker: Some(worker),
+            },
+        );
+        Ok(())
     }
 
     pub fn advance(&mut self, delta_ms: u64, gpu: &mut dyn GpuBackend) {
@@ -440,5 +480,16 @@ impl RuntimeMediaSession {
             stencil: None,
             native_emote: None,
         });
+    }
+}
+
+impl Drop for RuntimeMediaSession {
+    fn drop(&mut self) {
+        self.stop_all();
+        // A queued Play can still reference a completed WAV after Stop. Keep
+        // it until session teardown; consumers may unlink it after opening.
+        for path in self.temporary_audio.drain(..) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }

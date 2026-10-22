@@ -11,5 +11,6 @@ Source: https://github.com/sakarie9/pfs-rs (`pf8/`), MIT license（见 LICENSE�
 - 接受 `pf2` magic（按 PF6 同等布局处理，不加密）。
 - 条目查找键统一小写（大小写不敏感，与引擎历史行为一致；同键取先出现者）。
 - 新增 `read_range`：按条目内偏移做带解密的范围读取（视频/音频流式读取用）。
+- 分配索引前校验声明长度不超过底层完整流，拒绝截断或溢出的索引长度。
 
 升级上游版本时请保留以上改动并跑 `cargo test`。

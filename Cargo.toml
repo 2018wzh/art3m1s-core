@@ -59,3 +59,10 @@ game-probes = ["gl-backend"]
 [dev-dependencies]
 # 离屏像素回读测试需要在 macOS 上创建一个 CGL headless 上下文。
 glow = "0.16"
+
+[workspace]
+members = ["crates/astra-emu-art3m1s-core"]
+
+[patch.crates-io]
+kira = { git = "https://github.com/2018wzh/kira.git", rev = "7d8961b20bce2ab8fd43b4bb34150d7e2898785c" }
+cpal = { git = "https://github.com/2018wzh/cpal.git", rev = "ecfda841a9140d60bbec1630d47ca91f1a77b8f3" }
