@@ -1,7 +1,7 @@
 //! Input is copied at the ABI boundary and consumed by the native owner.
 use crate::error::{self, NativeResult};
 use art3m1s_core::runtime::CoreRuntime;
-use astra_emu_abi::*;
+use shinki_emu_abi::*;
 pub(crate) enum Input {
     Key(u32, bool),
     Move(f64, f64, FrameIdentity),
@@ -11,7 +11,7 @@ pub(crate) enum Input {
 pub(crate) unsafe fn decode(event: &InputEvent) -> NativeResult<Input> {
     let invalid = || {
         error::invalid(
-            "ASTRA_EMU_ARTEMIS_INPUT",
+            "SHINKI_EMU_ARTEMIS_INPUT",
             "unsupported or invalid native input",
         )
     };
@@ -65,7 +65,7 @@ pub(crate) fn apply(
             || frame.generation > identity.generation
         {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_STALE_INPUT",
+                "SHINKI_EMU_ARTEMIS_STALE_INPUT",
                 "pointer frame is no longer valid",
             ));
         }
@@ -75,7 +75,7 @@ pub(crate) fn apply(
             || y >= f64::from(info.raster.height)
         {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_INPUT",
+                "SHINKI_EMU_ARTEMIS_INPUT",
                 "pointer lies outside the displayed frame",
             ));
         }

@@ -87,7 +87,7 @@ impl AudioBridge {
                     Ok(Ok(())) => None,
                     Ok(Err(error)) => Some(error),
                     Err(_) => Some(error::invalid(
-                        "ASTRA_EMU_ARTEMIS_AUDIO_PANIC",
+                        "SHINKI_EMU_ARTEMIS_AUDIO_PANIC",
                         "native audio worker panicked",
                     )),
                 };
@@ -95,7 +95,7 @@ impl AudioBridge {
                     *state.error.lock() = Some(error);
                 }
             })
-            .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_AUDIO_WORKER", e.to_string()))?;
+            .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_AUDIO_WORKER", e.to_string()))?;
         let mut bridge = Self {
             tx,
             finished_rx,
@@ -107,7 +107,7 @@ impl AudioBridge {
             let _ = bridge.shutdown();
             return Err(bridge.error.lock().clone().unwrap_or_else(|| {
                 error::invalid(
-                    "ASTRA_EMU_ARTEMIS_AUDIO_DEVICE",
+                    "SHINKI_EMU_ARTEMIS_AUDIO_DEVICE",
                     "native audio device initialization failed",
                 )
             }));
@@ -126,7 +126,7 @@ impl AudioBridge {
                 Ok(ControlFlow::Break(()))
             }
             Err(_) => Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_AUDIO_QUEUE",
+                "SHINKI_EMU_ARTEMIS_AUDIO_QUEUE",
                 "audio command queue unavailable",
             )),
         }
@@ -149,7 +149,7 @@ impl AudioBridge {
         let joined = self.handle.take().map(|handle| handle.join()).transpose();
         if joined.is_err() {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_AUDIO_WORKER",
+                "SHINKI_EMU_ARTEMIS_AUDIO_WORKER",
                 "native audio worker panicked",
             ));
         }

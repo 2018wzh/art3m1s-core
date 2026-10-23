@@ -13,6 +13,22 @@ Host 负责。
 
 当前版本为 **0.4.0**，对应生产宿主 Art3m1s **1.3.0**。
 
+## ShinkiEMU 适配
+
+`crates/shinki-emu-art3m1s-core` 是独立的 ShinkiEMU C ABI v3 入口，复用本仓原生
+Artemis runtime，交付 `shinki_emu_art3m1s_core.dll` 和 `shinki_emu_query`。
+从 ShinkiEMU 根目录运行：
+
+```sh
+cargo xtask build --target x86_64-pc-windows-msvc --core art3m1s-core --release
+```
+
+适配 crate 的 `build.rs` 写入 `OUT_DIR/core-build.json`，记录 ABI、目标、profile 和
+许可输入，Cargo 编译真实 cdylib。依赖固定 ShinkiEMU
+`cb8d9dd22d7d0ab129085b324c94d6dc81fa19e3`；原生前置条件、来源和许可见
+[MODIFICATIONS](crates/shinki-emu-art3m1s-core/MODIFICATIONS.md) 与
+[THIRD_PARTY_NOTICES](crates/shinki-emu-art3m1s-core/THIRD_PARTY_NOTICES.md)。
+
 ## 功能
 
 - 多引擎 runtime 边界：`Art3m1sApiV1`、`Art3m1sRfvpApiV1` 和可选的

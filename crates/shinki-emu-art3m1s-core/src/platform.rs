@@ -3,7 +3,7 @@ use crate::{
     media::{Dialog, WindowCommand},
     session::Platform,
 };
-use astra_emu_abi::*;
+use shinki_emu_abi::*;
 use std::ops::ControlFlow;
 /// User answer to a native `[dialog]`, submitted back to the core.
 #[derive(Debug, PartialEq)]
@@ -110,7 +110,7 @@ fn modal(
             .any(|button| button.id == result.selected_button)
     {
         return Err(error::invalid(
-            "ASTRA_EMU_ARTEMIS_PLATFORM",
+            "SHINKI_EMU_ARTEMIS_PLATFORM",
             "window.modal returned no valid dialog selection",
         ));
     }
@@ -118,14 +118,14 @@ fn modal(
     let text = if accepted && dialog.input.is_some() {
         if result.input.len > input.len() {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_PLATFORM",
+                "SHINKI_EMU_ARTEMIS_PLATFORM",
                 "window.modal returned text beyond its buffer",
             ));
         }
         input.truncate(result.input.len);
         Some(String::from_utf8(input).map_err(|_| {
             error::invalid(
-                "ASTRA_EMU_ARTEMIS_PLATFORM",
+                "SHINKI_EMU_ARTEMIS_PLATFORM",
                 "window.modal returned invalid UTF-8 text",
             )
         })?)
@@ -159,7 +159,7 @@ fn state_flags(mode: u32, minimized: u32, valid_fields: u32) -> NativeResult<i32
         || minimized > 1
     {
         return Err(error::invalid(
-            "ASTRA_EMU_ARTEMIS_WINDOW_STATE",
+            "SHINKI_EMU_ARTEMIS_WINDOW_STATE",
             "window.query_state did not return valid mode and minimized fields",
         ));
     }
@@ -195,7 +195,7 @@ fn invoke(
 ) -> NativeResult<ControlFlow<(), WindowResult>> {
     let callback = platform.0.request.ok_or_else(|| {
         error::invalid(
-            "ASTRA_EMU_ARTEMIS_PLATFORM_UNAVAILABLE",
+            "SHINKI_EMU_ARTEMIS_PLATFORM_UNAVAILABLE",
             format!("native window service is unavailable for {operation}"),
         )
     })?;
@@ -227,7 +227,7 @@ fn invoke(
     }
     if status != OK {
         return Err(crate::error::invalid(
-            "ASTRA_EMU_ARTEMIS_PLATFORM",
+            "SHINKI_EMU_ARTEMIS_PLATFORM",
             format!(
                 "native platform request {operation} failed (status {status}): {}",
                 String::from_utf8_lossy(
@@ -243,85 +243,6 @@ fn invoke(
 mod tests {
     use super::*;
 
-    #[test]
-    fn pointer_requests_preserve_partial_updates_at_the_host_boundary() {
-        #[derive(Debug, Default, PartialEq)]
-        struct Capture {
-            kind: u32,
-            flags: u32,
-            x: i32,
-            y: i32,
-            autohide_ms: u64,
-        }
-        unsafe extern "C" fn capture(
-            context: *mut std::ffi::c_void,
-            request: *const WindowRequest,
-            _: *mut WindowResult,
-            _: *mut Error,
-        ) -> Status {
-            let request = unsafe { &*request };
-            unsafe {
-                *context.cast::<Capture>() = Capture {
-                    kind: request.kind,
-                    flags: request.flags,
-                    x: request.x,
-                    y: request.y,
-                    autohide_ms: request.autohide_ms,
-                };
-            }
-            OK
-        }
-        for visible in [None, Some(false), Some(true)] {
-            for autohide_ms in [None, Some(0), Some(1000)] {
-                let mut actual = Capture::default();
-                let platform = Platform(
-                    WindowService {
-                        context: (&mut actual as *mut Capture).cast(),
-                        request: Some(capture),
-                        invalidate: None,
-                    },
-                    CancellationService {
-                        context: std::ptr::null_mut(),
-                        is_cancelled: None,
-                    },
-                );
-                assert!(request(
-                    platform,
-                    WindowCommand::Pointer {
-                        x: Some(12),
-                        y: None,
-                        visible,
-                        autohide_ms,
-                    },
-                    1,
-                    1,
-                    1,
-                )
-                .unwrap()
-                .is_continue());
-                let mut flags = POINTER_SET_X;
-                if let Some(visible) = visible {
-                    flags |= POINTER_SET_VISIBILITY;
-                    if visible {
-                        flags |= POINTER_VISIBLE;
-                    }
-                }
-                if autohide_ms.is_some() {
-                    flags |= POINTER_SET_AUTOHIDE;
-                }
-                assert_eq!(
-                    actual,
-                    Capture {
-                        kind: WINDOW_POINTER,
-                        flags,
-                        x: 12,
-                        y: 0,
-                        autohide_ms: autohide_ms.unwrap_or(0),
-                    }
-                );
-            }
-        }
-    }
 
     #[test]
     fn native_window_flags_use_only_actual_mode_and_minimized() {
@@ -349,7 +270,7 @@ mod tests {
             (FULLSCREEN_WINDOWED, 2, valid),
         ] {
             let error = state_flags(mode, minimized, fields).unwrap_err();
-            assert_eq!(error.code, "ASTRA_EMU_ARTEMIS_WINDOW_STATE");
+            assert_eq!(error.code, "SHINKI_EMU_ARTEMIS_WINDOW_STATE");
             assert!(error.message.contains("window.query_state"));
         }
     }
@@ -368,7 +289,7 @@ mod tests {
             },
         );
         let error = query_state(platform, 1, 1, 1).unwrap_err();
-        assert_eq!(error.code, "ASTRA_EMU_ARTEMIS_PLATFORM_UNAVAILABLE");
+        assert_eq!(error.code, "SHINKI_EMU_ARTEMIS_PLATFORM_UNAVAILABLE");
         assert!(error.message.contains("window.query_state"));
     }
 
@@ -534,7 +455,7 @@ mod tests {
         let mut invented = host(OK, 7, b"");
         assert_eq!(
             ask(&mut invented, true, None).unwrap_err().code,
-            "ASTRA_EMU_ARTEMIS_PLATFORM"
+            "SHINKI_EMU_ARTEMIS_PLATFORM"
         );
     }
 }

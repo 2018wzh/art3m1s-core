@@ -9,7 +9,7 @@ use art3m1s_core::{
     backend::BackendSelection, host_events::HostEvents, host_files::HostResources,
     runtime::CoreRuntime,
 };
-use astra_emu_abi::*;
+use shinki_emu_abi::*;
 use parking_lot::Mutex;
 use std::{
     ops::ControlFlow,
@@ -37,7 +37,7 @@ impl Platform {
     fn check(self, epoch: u64) -> NativeResult<()> {
         if self.cancelled(epoch) {
             Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_CANCELLED",
+                "SHINKI_EMU_ARTEMIS_CANCELLED",
                 "session was cancelled",
             ))
         } else {
@@ -114,7 +114,7 @@ impl SessionOwner {
                         state.info = surface(runtime.rt.stage_width(), runtime.rt.stage_height());
                         state.info.validate().map_err(|_| {
                             error::invalid(
-                                "ASTRA_EMU_ARTEMIS_FRAME_SIZE",
+                                "SHINKI_EMU_ARTEMIS_FRAME_SIZE",
                                 "invalid native stage dimensions",
                             )
                         })?;
@@ -137,7 +137,7 @@ impl SessionOwner {
                     Ok(Ok(())) => None,
                     Ok(Err(error)) => Some(error),
                     Err(_) => Some(error::invalid(
-                        "ASTRA_EMU_ARTEMIS_PANIC",
+                        "SHINKI_EMU_ARTEMIS_PANIC",
                         "native owner panicked",
                     )),
                 };
@@ -152,7 +152,7 @@ impl SessionOwner {
                     let _ = ready_tx.try_send(Err(error));
                 }
             })
-            .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_WORKER", e.to_string()))?;
+            .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_WORKER", e.to_string()))?;
         let wake = thread.thread().clone();
         let mut owner = Box::new(Self {
             commands: tx,
@@ -169,7 +169,7 @@ impl SessionOwner {
             value => {
                 let failure = value.ok().and_then(Result::err).unwrap_or_else(|| {
                     error::invalid(
-                        "ASTRA_EMU_ARTEMIS_BOOT",
+                        "SHINKI_EMU_ARTEMIS_BOOT",
                         "native owner stopped or was cancelled during open",
                     )
                 });
@@ -184,20 +184,20 @@ impl SessionOwner {
     ) -> NativeResult<()> {
         if self.cancelled.load(Ordering::Acquire) {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_CANCELLED",
+                "SHINKI_EMU_ARTEMIS_CANCELLED",
                 "session is cancelled",
             ));
         }
         let (tx, rx) = mpsc::sync_channel(1);
         self.commands.try_send(make(tx)).map_err(|_| {
             error::invalid(
-                "ASTRA_EMU_ARTEMIS_COMMAND_QUEUE",
+                "SHINKI_EMU_ARTEMIS_COMMAND_QUEUE",
                 "native command queue unavailable",
             )
         })?;
         rx.recv().map_err(|_| {
             self.snapshot.lock().error.clone().unwrap_or_else(|| {
-                error::invalid("ASTRA_EMU_ARTEMIS_CLOSED", "native owner stopped")
+                error::invalid("SHINKI_EMU_ARTEMIS_CLOSED", "native owner stopped")
             })
         })?
     }
@@ -225,7 +225,7 @@ impl SessionOwner {
         let joined = self.thread.take().map(|thread| thread.join()).transpose();
         if joined.is_err() {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_PANIC",
+                "SHINKI_EMU_ARTEMIS_PANIC",
                 "native owner join failed",
             ));
         }
@@ -273,7 +273,7 @@ pub(crate) fn project_resources(
         }
     }
     Err(error::invalid(
-        "ASTRA_EMU_ARTEMIS_PROJECT_INI",
+        "SHINKI_EMU_ARTEMIS_PROJECT_INI",
         "PFS has no readable system.ini",
     ))
 }
@@ -291,7 +291,7 @@ impl Runtime {
             project_resources(&archive, &extra_archive, || platform.check(epoch))?;
         let save_dir = path.join("savedata");
         std::fs::create_dir_all(&save_dir)
-            .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_SAVE_DIR", e.to_string()))?;
+            .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_SAVE_DIR", e.to_string()))?;
         resources
             .set_save_dir(Some(&save_dir))
             .map_err(error::engine)?;
@@ -348,7 +348,7 @@ impl Runtime {
                 return Ok(ControlFlow::Break(()));
             }
             *request = request.checked_add(1).ok_or_else(|| {
-                error::invalid("ASTRA_EMU_ARTEMIS_REQUEST_ID", "request IDs exhausted")
+                error::invalid("SHINKI_EMU_ARTEMIS_REQUEST_ID", "request IDs exhausted")
             })?;
             let answer =
                 match crate::platform::request(platform, command, epoch, context, *request)? {
@@ -403,7 +403,7 @@ impl Runtime {
                         let result = match result {
                             Ok(ControlFlow::Break(())) => {
                                 let _ = reply.send(Err(error::invalid(
-                                    "ASTRA_EMU_ARTEMIS_CANCELLED",
+                                    "SHINKI_EMU_ARTEMIS_CANCELLED",
                                     "session was cancelled",
                                 )));
                                 break 'owner;
@@ -446,7 +446,7 @@ impl Runtime {
             }
             if window_state_dirty {
                 request = request.checked_add(1).ok_or_else(|| {
-                    error::invalid("ASTRA_EMU_ARTEMIS_REQUEST_ID", "request IDs exhausted")
+                    error::invalid("SHINKI_EMU_ARTEMIS_REQUEST_ID", "request IDs exhausted")
                 })?;
                 let flags = match crate::platform::query_state(
                     platform,
@@ -511,11 +511,11 @@ impl Runtime {
                     let mut state = shared.lock();
                     let old = context.load(Ordering::Acquire);
                     let next = old.checked_add(1).ok_or_else(|| {
-                        error::invalid("ASTRA_EMU_ARTEMIS_GENERATION", "context epoch exhausted")
+                        error::invalid("SHINKI_EMU_ARTEMIS_GENERATION", "context epoch exhausted")
                     })?;
                     state.identity.output_epoch =
                         state.identity.output_epoch.checked_add(1).ok_or_else(|| {
-                            error::invalid("ASTRA_EMU_ARTEMIS_GENERATION", "output epoch exhausted")
+                            error::invalid("SHINKI_EMU_ARTEMIS_GENERATION", "output epoch exhausted")
                         })?;
                     state.pixels = None;
                     state.identity.generation = 0;
@@ -555,14 +555,14 @@ impl Runtime {
                         .map_err(error::engine)?;
                     let info = surface(self.rt.stage_width(), self.rt.stage_height());
                     info.validate().map_err(|_| {
-                        error::invalid("ASTRA_EMU_ARTEMIS_FRAME_SIZE", "invalid complete frame")
+                        error::invalid("SHINKI_EMU_ARTEMIS_FRAME_SIZE", "invalid complete frame")
                     })?;
                     let mut state = shared.lock();
                     if state.info.logical != info.logical || state.info.raster != info.raster {
                         state.identity.output_epoch =
                             state.identity.output_epoch.checked_add(1).ok_or_else(|| {
                                 error::invalid(
-                                    "ASTRA_EMU_ARTEMIS_GENERATION",
+                                    "SHINKI_EMU_ARTEMIS_GENERATION",
                                     "output epoch exhausted",
                                 )
                             })?;
@@ -571,7 +571,7 @@ impl Runtime {
                     state.identity.generation =
                         state.identity.generation.checked_add(1).ok_or_else(|| {
                             error::invalid(
-                                "ASTRA_EMU_ARTEMIS_GENERATION",
+                                "SHINKI_EMU_ARTEMIS_GENERATION",
                                 "frame generation exhausted",
                             )
                         })?;

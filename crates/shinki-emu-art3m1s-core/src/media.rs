@@ -103,7 +103,7 @@ struct VideoAudioSource {
 impl VideoAudioSource {
     fn open(path: &str) -> NativeResult<Self> {
         let source_error = |cause: std::io::Error| {
-            error::invalid("ASTRA_EMU_ARTEMIS_VIDEO_AUDIO_SOURCE", cause.to_string())
+            error::invalid("SHINKI_EMU_ARTEMIS_VIDEO_AUDIO_SOURCE", cause.to_string())
         };
         let file = File::open(path).map_err(source_error)?;
         let length = file.metadata().map_err(source_error)?.len();
@@ -211,20 +211,20 @@ pub(crate) fn drain(
                     match char::from_u32(aux) {
                         Some('E') => {
                             return Err(error::invalid(
-                                "ASTRA_EMU_ARTEMIS_ENGINE",
+                                "SHINKI_EMU_ARTEMIS_ENGINE",
                                 message.to_string(),
                             ))
                         }
                         Some('W') => {
-                            tracing::warn!(event = "astra.emu.artemis.engine_log", "{message}")
+                            tracing::warn!(event = "shinki.emu.artemis.engine_log", "{message}")
                         }
                         Some('D') => {
-                            tracing::debug!(event = "astra.emu.artemis.engine_log", "{message}")
+                            tracing::debug!(event = "shinki.emu.artemis.engine_log", "{message}")
                         }
                         Some('T') => {
-                            tracing::trace!(event = "astra.emu.artemis.engine_log", "{message}")
+                            tracing::trace!(event = "shinki.emu.artemis.engine_log", "{message}")
                         }
-                        _ => tracing::info!(event = "astra.emu.artemis.engine_log", "{message}"),
+                        _ => tracing::info!(event = "shinki.emu.artemis.engine_log", "{message}"),
                     }
                 }
                 EVENT_KIND_MEDIA => commands.extend(parse_media(payload, resources)?),
@@ -266,7 +266,7 @@ fn parse_ui(bytes: &[u8]) -> NativeResult<WindowCommand> {
         let show: Show = parse(envelope.payload)?;
         if [&show.title, &show.message, &show.initial_text]
             .into_iter()
-            .any(|text| text.len() > astra_emu_abi::MAX_MODAL_TEXT)
+            .any(|text| text.len() > shinki_emu_abi::MAX_MODAL_TEXT)
         {
             return Err(invalid());
         }
@@ -293,7 +293,7 @@ fn parse_ui(bytes: &[u8]) -> NativeResult<WindowCommand> {
         })
     } else {
         Err(error::invalid(
-            "ASTRA_EMU_ARTEMIS_UI_UNSUPPORTED",
+            "SHINKI_EMU_ARTEMIS_UI_UNSUPPORTED",
             format!(
                 "native UI request is not connected: {}",
                 envelope.kind.chars().take(128).collect::<String>()
@@ -303,7 +303,7 @@ fn parse_ui(bytes: &[u8]) -> NativeResult<WindowCommand> {
 }
 fn invalid() -> NativeError {
     error::invalid(
-        "ASTRA_EMU_ARTEMIS_MEDIA_COMMAND",
+        "SHINKI_EMU_ARTEMIS_MEDIA_COMMAND",
         "invalid native media command",
     )
 }
@@ -391,7 +391,7 @@ fn parse_media(bytes: &[u8], resources: &HostResources) -> NativeResult<Vec<Mixe
         "audio_stop_all" => MixerCommand::StopAll { fade_ms: 0 },
         _ => {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_MEDIA_UNSUPPORTED",
+                "SHINKI_EMU_ARTEMIS_MEDIA_UNSUPPORTED",
                 format!("native command is not connected: {}", envelope.kind),
             ))
         }
@@ -402,7 +402,7 @@ fn resolve_sources(p: &PlayPayload, resources: &HostResources) -> NativeResult<S
     let open = |path: &str| -> NativeResult<Arc<dyn MediaSource>> {
         resources
             .open_media_source(path)
-            .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_AUDIO_SOURCE", e.to_string()))
+            .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_AUDIO_SOURCE", e.to_string()))
     };
     Ok(SourcePair {
         base: open(p.resolved_file.as_deref().unwrap_or(&p.file))?,

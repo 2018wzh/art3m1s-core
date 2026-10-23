@@ -3,7 +3,7 @@ use crate::{
     provider,
     session::{Platform, SessionOwner},
 };
-use astra_emu_abi::*;
+use shinki_emu_abi::*;
 use parking_lot::Mutex;
 use std::{
     ffi::c_void,
@@ -41,7 +41,7 @@ fn boundary(out: *mut Error, action: impl FnOnce() -> NativeResult<()>) -> Statu
         Err(_) => failure(
             out,
             PANICKED,
-            "ASTRA_EMU_ARTEMIS_PANIC",
+            "SHINKI_EMU_ARTEMIS_PANIC",
             "panic contained at native ABI boundary",
         ),
     }
@@ -51,7 +51,7 @@ fn initialized() -> NativeResult<()> {
         Ok(())
     } else {
         Err(error::invalid(
-            "ASTRA_EMU_FAMILY_DIAGNOSTIC_INIT",
+            "SHINKI_EMU_FAMILY_DIAGNOSTIC_INIT",
             "initialize diagnostics before using the core",
         ))
     }
@@ -61,7 +61,7 @@ unsafe fn initialize_impl(diagnostics: *const Diagnostics, out: *mut Error) -> S
         return failure(
             out,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_FAMILY_DIAGNOSTIC_INIT",
+            "SHINKI_EMU_FAMILY_DIAGNOSTIC_INIT",
             "missing diagnostics",
         );
     }
@@ -70,7 +70,7 @@ unsafe fn initialize_impl(diagnostics: *const Diagnostics, out: *mut Error) -> S
         return failure(
             out,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_FAMILY_DIAGNOSTIC_INIT",
+            "SHINKI_EMU_FAMILY_DIAGNOSTIC_INIT",
             "invalid diagnostics header or callbacks",
         );
     }
@@ -79,7 +79,7 @@ unsafe fn initialize_impl(diagnostics: *const Diagnostics, out: *mut Error) -> S
         return failure(
             out,
             status,
-            "ASTRA_EMU_FAMILY_DIAGNOSTIC_INIT",
+            "SHINKI_EMU_FAMILY_DIAGNOSTIC_INIT",
             "diagnostics bridge installation failed",
         );
     }
@@ -94,7 +94,7 @@ unsafe extern "C" fn initialize(diagnostics: *const Diagnostics, out: *mut Error
         failure(
             out,
             PANICKED,
-            "ASTRA_EMU_FAMILY_DIAGNOSTIC_INIT",
+            "SHINKI_EMU_FAMILY_DIAGNOSTIC_INIT",
             "diagnostic initialization panicked",
         )
     })
@@ -104,7 +104,7 @@ unsafe extern "C" fn describe(out: *mut Descriptor, error: *mut Error) -> Status
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null descriptor output",
         );
     }
@@ -134,7 +134,7 @@ unsafe extern "C" fn probe(path: Bytes, out: *mut ProbeResult, error: *mut Error
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null probe output",
         );
     }
@@ -142,7 +142,7 @@ unsafe extern "C" fn probe(path: Bytes, out: *mut ProbeResult, error: *mut Error
     let status = boundary(error, || {
         initialized()?;
         let path = unsafe { path.text(32768) }.map_err(|_| {
-            crate::error::invalid("ASTRA_EMU_ARTEMIS_PROBE_PATH", "invalid UTF-8 game path")
+            crate::error::invalid("SHINKI_EMU_ARTEMIS_PROBE_PATH", "invalid UTF-8 game path")
         })?;
         if let Some(id) = provider::probe(Path::new(path))? {
             let mut storage = PROBE_ID.lock();
@@ -174,7 +174,7 @@ unsafe extern "C" fn open(
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null open output",
         );
     }
@@ -190,7 +190,7 @@ unsafe extern "C" fn open(
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null open request",
         );
     }
@@ -203,7 +203,7 @@ unsafe extern "C" fn open(
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_RENDER_EXTENT",
+            "SHINKI_EMU_ARTEMIS_RENDER_EXTENT",
             "render extent is not configurable for Artemis",
         );
     }
@@ -221,12 +221,12 @@ unsafe extern "C" fn open(
             || (request.host.window.request.is_some() && request.host.window.invalidate.is_none())
         {
             return Err(crate::error::invalid(
-                "ASTRA_EMU_ARTEMIS_OPEN",
+                "SHINKI_EMU_ARTEMIS_OPEN",
                 "invalid open header, identity, window or cancellation service",
             ));
         }
         let path = unsafe { request.game_path.text(32768) }.map_err(|_| {
-            crate::error::invalid("ASTRA_EMU_ARTEMIS_OPEN", "invalid UTF-8 game path")
+            crate::error::invalid("SHINKI_EMU_ARTEMIS_OPEN", "invalid UTF-8 game path")
         })?;
         let entries = unsafe {
             borrowed_array(
@@ -236,7 +236,7 @@ unsafe extern "C" fn open(
             )
         }
         .map_err(|_| {
-            crate::error::invalid("ASTRA_EMU_ARTEMIS_CONFIG", "invalid configuration array")
+            crate::error::invalid("SHINKI_EMU_ARTEMIS_CONFIG", "invalid configuration array")
         })?;
         let configuration = unsafe { provider::parse_configuration(entries) }?;
         let archive = provider::find_base_archive(Path::new(path), &configuration.archive)?;
@@ -270,7 +270,7 @@ unsafe extern "C" fn open(
 unsafe fn owner<'a>(session: Session) -> NativeResult<&'a SessionOwner> {
     if session.is_null() {
         return Err(crate::error::invalid(
-            "ASTRA_EMU_ARTEMIS_SESSION",
+            "SHINKI_EMU_ARTEMIS_SESSION",
             "null session handle",
         ));
     }
@@ -285,7 +285,7 @@ unsafe extern "C" fn input(
     boundary(error, || {
         let owner = unsafe { owner(session)? };
         let values = unsafe { borrowed_array(data, count, 1024) }
-            .map_err(|_| crate::error::invalid("ASTRA_EMU_ARTEMIS_INPUT", "invalid input array"))?;
+            .map_err(|_| crate::error::invalid("SHINKI_EMU_ARTEMIS_INPUT", "invalid input array"))?;
         let inputs = values
             .iter()
             .map(|value| unsafe { crate::events::decode(value) })
@@ -298,7 +298,7 @@ unsafe extern "C" fn control(session: Session, command: u32, error: *mut Error) 
         return failure(
             error,
             UNSUPPORTED,
-            "ASTRA_EMU_ARTEMIS_CONTROL",
+            "SHINKI_EMU_ARTEMIS_CONTROL",
             "unsupported native control",
         );
     }
@@ -311,7 +311,7 @@ unsafe extern "C" fn state(session: Session, out: *mut SessionState, error: *mut
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null state output",
         );
     }
@@ -349,7 +349,7 @@ unsafe extern "C" fn frame(
         return failure(
             error,
             INVALID_ARGUMENT,
-            "ASTRA_EMU_ARTEMIS_ARGUMENT",
+            "SHINKI_EMU_ARTEMIS_ARGUMENT",
             "null surface output",
         );
     }
@@ -398,7 +398,7 @@ unsafe extern "C" fn close(session: Session, error: *mut Error) -> Status {
     boundary(error, || {
         if session.is_null() {
             return Err(crate::error::invalid(
-                "ASTRA_EMU_ARTEMIS_SESSION",
+                "SHINKI_EMU_ARTEMIS_SESSION",
                 "null session handle",
             ));
         }
@@ -450,6 +450,6 @@ pub unsafe extern "C" fn query(version: u32, out: *mut *const CoreApi) -> Status
 }
 #[cfg(not(feature = "static-core"))]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn astra_emu_query(version: u32, out: *mut *const CoreApi) -> Status {
+pub unsafe extern "C" fn shinki_emu_query(version: u32, out: *mut *const CoreApi) -> Status {
     unsafe { query(version, out) }
 }

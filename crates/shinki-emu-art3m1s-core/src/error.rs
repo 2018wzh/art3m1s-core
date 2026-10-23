@@ -18,5 +18,5 @@ pub(crate) fn invalid(code: &'static str, message: impl Into<String>) -> NativeE
     }
 }
 pub(crate) fn engine(message: String) -> NativeError {
-    invalid("ASTRA_EMU_ARTEMIS_ENGINE", message)
+    invalid("SHINKI_EMU_ARTEMIS_ENGINE", message)
 }

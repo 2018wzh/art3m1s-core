@@ -4,7 +4,7 @@ use crate::{
     session,
 };
 use art3m1s_core::archive as pfs_upk;
-use astra_emu_abi::*;
+use shinki_emu_abi::*;
 use encoding_rs::{Encoding, GB18030, SHIFT_JIS, UTF_8};
 use std::path::{Path, PathBuf};
 pub(crate) const FIELD_COUNT: usize = 2;
@@ -62,21 +62,21 @@ pub(crate) struct Configuration {
 pub(crate) unsafe fn parse_configuration(entries: &[ConfigEntry]) -> NativeResult<Configuration> {
     unsafe { validate_config(&fields(), entries) }.map_err(|e| {
         error::invalid(
-            "ASTRA_EMU_ARTEMIS_CONFIG",
+            "SHINKI_EMU_ARTEMIS_CONFIG",
             format!("configuration entry {}: {}", e.index, e.reason),
         )
     })?;
     let mut config = Configuration::default();
     for entry in entries {
         let id = unsafe { entry.id.text(128) }
-            .map_err(|_| error::invalid("ASTRA_EMU_ARTEMIS_CONFIG", "invalid field ID"))?;
+            .map_err(|_| error::invalid("SHINKI_EMU_ARTEMIS_CONFIG", "invalid field ID"))?;
         let (target, maximum) = match id {
             "archive" => (&mut config.archive, 255),
             "extra_archive" => (&mut config.extra_archive, 4096),
             _ => unreachable!("validated configuration field"),
         };
         let value = unsafe { entry.value.text.text(maximum) }
-            .map_err(|_| error::invalid("ASTRA_EMU_ARTEMIS_CONFIG", "invalid field text"))?;
+            .map_err(|_| error::invalid("SHINKI_EMU_ARTEMIS_CONFIG", "invalid field text"))?;
         target.push_str(value);
     }
     Ok(config)
@@ -86,10 +86,10 @@ pub(crate) fn probe(root: &Path) -> NativeResult<Option<String>> {
         return Ok(None);
     }
     let entries = std::fs::read_dir(root)
-        .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_PROBE_PATH", e.to_string()))?;
+        .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_PROBE_PATH", e.to_string()))?;
     for entry in entries {
         let path = entry
-            .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_PROBE_PATH", e.to_string()))?
+            .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_PROBE_PATH", e.to_string()))?
             .path();
         if path.is_file()
             && path
@@ -106,7 +106,7 @@ pub(crate) fn probe(root: &Path) -> NativeResult<Option<String>> {
                 .and_then(|n| n.to_str())
                 .map(|n| Some(n.to_owned()))
                 .ok_or_else(|| {
-                    error::invalid("ASTRA_EMU_ARTEMIS_GAME_ID", "game ID is not valid UTF-8")
+                    error::invalid("SHINKI_EMU_ARTEMIS_GAME_ID", "game ID is not valid UTF-8")
                 });
         }
     }
@@ -121,30 +121,30 @@ pub(crate) fn find_base_archive(root: &Path, selected: &str) -> NativeResult<Pat
     if !selected.is_empty() {
         if selected.contains(['/', '\\', ':']) || !selected.to_ascii_lowercase().ends_with(".pfs") {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_ARCHIVE",
+                "SHINKI_EMU_ARTEMIS_ARCHIVE",
                 "base archive must be a direct PFS filename",
             ));
         }
         let path = root.join(selected);
         if !path.is_file() {
             return Err(error::invalid(
-                "ASTRA_EMU_ARTEMIS_ARCHIVE",
+                "SHINKI_EMU_ARTEMIS_ARCHIVE",
                 "selected archive is unavailable",
             ));
         }
         return Ok(path);
     }
     let mut candidates = std::fs::read_dir(root)
-        .map_err(|_| error::invalid("ASTRA_EMU_ARTEMIS_ARCHIVE", "game directory is unreadable"))?
+        .map_err(|_| error::invalid("SHINKI_EMU_ARTEMIS_ARCHIVE", "game directory is unreadable"))?
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("pfs")));
     let first = candidates
         .next()
-        .ok_or_else(|| error::invalid("ASTRA_EMU_ARTEMIS_ARCHIVE", "no PFS base archive"))?;
+        .ok_or_else(|| error::invalid("SHINKI_EMU_ARTEMIS_ARCHIVE", "no PFS base archive"))?;
     if candidates.next().is_some() {
         return Err(error::invalid(
-            "ASTRA_EMU_ARTEMIS_ARCHIVE_AMBIGUOUS",
+            "SHINKI_EMU_ARTEMIS_ARCHIVE_AMBIGUOUS",
             "select the base PFS archive in core configuration",
         ));
     }
@@ -163,7 +163,7 @@ impl SessionLease {
             )
             .map_err(|_| {
                 error::invalid(
-                    "ASTRA_EMU_ARTEMIS_SESSION_ACTIVE",
+                    "SHINKI_EMU_ARTEMIS_SESSION_ACTIVE",
                     "one Artemis session may be active",
                 )
             })?;

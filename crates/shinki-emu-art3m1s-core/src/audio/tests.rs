@@ -17,7 +17,7 @@ fn disconnected_queue_is_only_cancellation_when_requested() {
             .send(MixerCommand::StopAll { fade_ms: 0 })
             .unwrap_err()
             .code,
-        "ASTRA_EMU_ARTEMIS_AUDIO_QUEUE"
+        "SHINKI_EMU_ARTEMIS_AUDIO_QUEUE"
     );
     audio.cancelled.store(true, Ordering::Release);
     assert!(audio

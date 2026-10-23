@@ -352,97 +352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "astra-byte-source"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "astra-core",
- "schemars",
- "serde",
- "sha2",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "astra-core"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "astra-property-derive",
- "blake3",
- "hex",
- "miette",
- "schemars",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "astra-emu-abi"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "tracing",
- "tracing-log",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "astra-emu-art3m1s-core"
-version = "0.1.0"
-dependencies = [
- "art3m1s-core",
- "astra-emu-abi",
- "astra-emu-sdk",
- "encoding_rs",
- "kira 0.12.2",
- "parking_lot",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "astra-emu-sdk"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "astra-media-core",
- "kira 0.12.2",
- "symphonia 0.6.1",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "astra-media-core"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "astra-byte-source",
- "astra-core",
- "rayon",
- "schemars",
- "serde",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "astra-property-derive"
-version = "0.1.0"
-source = "git+https://github.com/2018wzh/AstraEngine.git?rev=6d9d691dcc8f3d768e40b5be1d6f37366cca62d8#6d9d691dcc8f3d768e40b5be1d6f37366cca62d8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "atomic-arena"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1082,7 +991,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/2018wzh/cpal.git?rev=ecfda841a9140d60bbec1630d47ca91f1a77b8f3#ecfda841a9140d60bbec1630d47ca91f1a77b8f3"
+source = "git+https://github.com/Project-Shinkirou/cpal.git?rev=ecfda841a9140d60bbec1630d47ca91f1a77b8f3#ecfda841a9140d60bbec1630d47ca91f1a77b8f3"
 dependencies = [
  "alsa",
  "core-foundation-sys",
@@ -2675,7 +2584,7 @@ dependencies = [
 [[package]]
 name = "kira"
 version = "0.12.2"
-source = "git+https://github.com/2018wzh/kira.git?rev=7d8961b20bce2ab8fd43b4bb34150d7e2898785c#7d8961b20bce2ab8fd43b4bb34150d7e2898785c"
+source = "git+https://github.com/Project-Shinkirou/kira.git?rev=7d8961b20bce2ab8fd43b4bb34150d7e2898785c#7d8961b20bce2ab8fd43b4bb34150d7e2898785c"
 dependencies = [
  "atomic-arena",
  "cpal 0.18.2",
@@ -4322,6 +4231,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "roukaku-byte-source"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/RoukakuEngine?rev=ba28948b5dd00188fe53a24881a64dcaf0c69e2a#ba28948b5dd00188fe53a24881a64dcaf0c69e2a"
+dependencies = [
+ "roukaku-core",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "roukaku-core"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/RoukakuEngine?rev=ba28948b5dd00188fe53a24881a64dcaf0c69e2a#ba28948b5dd00188fe53a24881a64dcaf0c69e2a"
+dependencies = [
+ "blake3",
+ "hex",
+ "miette",
+ "roukaku-property-derive",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "roukaku-media-core"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/RoukakuEngine?rev=ba28948b5dd00188fe53a24881a64dcaf0c69e2a#ba28948b5dd00188fe53a24881a64dcaf0c69e2a"
+dependencies = [
+ "rayon",
+ "roukaku-byte-source",
+ "roukaku-core",
+ "schemars",
+ "serde",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "roukaku-property-derive"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/RoukakuEngine?rev=ba28948b5dd00188fe53a24881a64dcaf0c69e2a#ba28948b5dd00188fe53a24881a64dcaf0c69e2a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4650,6 +4612,57 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shinki-emu-abi"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/ShinkiEMU?rev=035155c78761768bc088169a4eca982f82e9d577#035155c78761768bc088169a4eca982f82e9d577"
+dependencies = [
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "shinki-emu-art3m1s-core"
+version = "0.1.0"
+dependencies = [
+ "art3m1s-core",
+ "encoding_rs",
+ "kira 0.12.2",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "shinki-emu-abi",
+ "shinki-emu-build",
+ "shinki-emu-sdk",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "shinki-emu-build"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/ShinkiEMU?rev=035155c78761768bc088169a4eca982f82e9d577#035155c78761768bc088169a4eca982f82e9d577"
+dependencies = [
+ "anyhow",
+ "cc",
+ "object",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "shinki-emu-sdk"
+version = "0.1.0"
+source = "git+https://github.com/Project-Shinkirou/ShinkiEMU?rev=035155c78761768bc088169a4eca982f82e9d577#035155c78761768bc088169a4eca982f82e9d577"
+dependencies = [
+ "kira 0.12.2",
+ "roukaku-media-core",
+ "symphonia 0.6.1",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
@@ -5375,7 +5388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",

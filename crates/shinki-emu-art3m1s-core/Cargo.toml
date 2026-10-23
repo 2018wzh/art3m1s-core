@@ -1,11 +1,12 @@
 [package]
-name = "astra-emu-art3m1s-core"
+name = "shinki-emu-art3m1s-core"
 version = "0.1.0"
 edition = "2021"
 license = "MPL-2.0"
+build = "build.rs"
 
 [lib]
-name = "astra_emu_art3m1s_core"
+name = "shinki_emu_art3m1s_core"
 crate-type = ["rlib", "cdylib"]
 doctest = false
 
@@ -14,12 +15,12 @@ default = []
 static-core = []
 
 [dependencies]
-astra-emu-abi = { git = "https://github.com/2018wzh/AstraEngine.git", rev = "6d9d691dcc8f3d768e40b5be1d6f37366cca62d8", features = ["diagnostic-bridge"] }
+shinki-emu-abi = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577", features = ["diagnostic-bridge"] }
 art3m1s-core = { path = "../..", default-features = false, features = ["ffmpeg"] }
 encoding_rs = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-astra-emu-sdk = { git = "https://github.com/2018wzh/AstraEngine.git", rev = "6d9d691dcc8f3d768e40b5be1d6f37366cca62d8", default-features = false, features = ["audio"] }
+shinki-emu-sdk = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577", default-features = false, features = ["audio"] }
 kira = { version = "=0.12.2", default-features = false, features = ["cpal"] }
 tracing = "0.1"
 parking_lot = "0.12"
@@ -33,7 +34,10 @@ art3m1s-core = { path = "../..", default-features = false, features = ["metal-ba
 [dev-dependencies]
 tempfile = "3"
 
-[package.metadata.astra]
+[build-dependencies]
+shinki-emu-build = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577" }
+
+[package.metadata.shinki]
 upstream = "https://github.com/Alphaly2K/art3m1s-core"
 upstream_revision = "ad90a62cb192b119b7cf8589aa7f87a94bd747c8"
 license_notice = "THIRD_PARTY_NOTICES.md"

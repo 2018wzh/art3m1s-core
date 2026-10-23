@@ -38,7 +38,7 @@ fn native_caption_uses_the_host_window_title_contract() {
 #[test]
 fn unsupported_native_ui_still_fails_with_the_request_kind() {
     let error = parse_ui(br#"{"kind":"openbrowser","payload":{}}"#).unwrap_err();
-    assert_eq!(error.code, "ASTRA_EMU_ARTEMIS_UI_UNSUPPORTED");
+    assert_eq!(error.code, "SHINKI_EMU_ARTEMIS_UI_UNSUPPORTED");
     assert!(error.to_string().contains("openbrowser"));
 }
 #[test]

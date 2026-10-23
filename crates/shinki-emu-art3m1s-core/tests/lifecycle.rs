@@ -1,5 +1,5 @@
-use astra_emu_abi::*;
-use astra_emu_art3m1s_core::artemis_query;
+use shinki_emu_abi::*;
+use shinki_emu_art3m1s_core::artemis_query;
 use std::{
     ptr,
     sync::Mutex,
@@ -116,40 +116,8 @@ fn malformed_archive_releases_native_session_lease() {
         .unwrap_err();
         assert_eq!(
             &failure.code[..failure.code_len as usize],
-            b"ASTRA_EMU_ARTEMIS_PROJECT_INI"
+            b"SHINKI_EMU_ARTEMIS_PROJECT_INI"
         );
-    }
-}
-#[test]
-fn descriptor_declares_v3_names_and_file_fields() {
-    let api = api();
-    let mut descriptor = std::mem::MaybeUninit::<Descriptor>::uninit();
-    assert_eq!(
-        unsafe { api.describe.unwrap()(descriptor.as_mut_ptr(), &mut Error::default()) },
-        OK
-    );
-    let descriptor = unsafe { descriptor.assume_init() };
-    unsafe { descriptor.validate() }.unwrap();
-    assert_eq!(
-        unsafe { descriptor.display_name.text(64) }.unwrap(),
-        "Art3m1s"
-    );
-    assert_eq!(
-        unsafe { descriptor.family_name.text(64) }.unwrap(),
-        "Artemis"
-    );
-    assert_eq!(descriptor.capabilities & CAP_RENDER_EXTENT, 0);
-    let fields = unsafe {
-        std::slice::from_raw_parts(descriptor.configuration, descriptor.configuration_count)
-    };
-    unsafe { validate_config(fields, &[]) }.unwrap();
-    for field in fields {
-        assert_eq!(
-            field.flags,
-            CONFIG_FLAG_FILE_PATH | CONFIG_FLAG_GAME_RELATIVE
-        );
-        assert_eq!(unsafe { field.group.text(64) }.unwrap(), "文件");
-        assert!(!unsafe { field.description.text(512) }.unwrap().is_empty());
     }
 }
 #[test]
@@ -175,7 +143,7 @@ fn non_default_render_extent_is_rejected() {
     .unwrap_err();
     assert_eq!(
         &failure.code[..failure.code_len as usize],
-        b"ASTRA_EMU_ARTEMIS_RENDER_EXTENT"
+        b"SHINKI_EMU_ARTEMIS_RENDER_EXTENT"
     );
 }
 

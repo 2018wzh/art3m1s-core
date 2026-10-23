@@ -39,7 +39,7 @@ fn bus(channel: Channel) -> usize {
 }
 fn fail() -> NativeError {
     error::invalid(
-        "ASTRA_EMU_ARTEMIS_AUDIO_MIXER",
+        "SHINKI_EMU_ARTEMIS_AUDIO_MIXER",
         "audio mixer capacity or data limit exceeded",
     )
 }
@@ -70,11 +70,11 @@ fn decode(
         }
         offset += read;
     }
-    match astra_emu_sdk::decode_audio(&bytes, budget, stop) {
+    match shinki_emu_sdk::decode_audio(&bytes, budget, stop) {
         Ok(data) => Ok(Some(data)),
-        Err(error) if error.code() == "ASTRA_EMU_AUDIO_CANCELLED" => Ok(None),
+        Err(error) if error.code() == "SHINKI_EMU_AUDIO_CANCELLED" => Ok(None),
         Err(error) => Err(crate::error::invalid(
-            "ASTRA_EMU_ARTEMIS_AUDIO_DECODE",
+            "SHINKI_EMU_ARTEMIS_AUDIO_DECODE",
             error.to_string(),
         )),
     }
@@ -85,7 +85,7 @@ pub(super) fn run(
     ready: SyncSender<bool>,
 ) -> NativeResult<()> {
     let mut manager = AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())
-        .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_AUDIO_DEVICE", e.to_string()))?;
+        .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_AUDIO_DEVICE", e.to_string()))?;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_manager(&mut manager, rx, state, ready)
     }));
@@ -94,7 +94,7 @@ pub(super) fn run(
     let shutdown = manager
         .backend_mut()
         .stop_and_join()
-        .map_err(|e| error::invalid("ASTRA_EMU_ARTEMIS_AUDIO_SHUTDOWN", e.to_string()));
+        .map_err(|e| error::invalid("SHINKI_EMU_ARTEMIS_AUDIO_SHUTDOWN", e.to_string()));
     match result {
         Ok(result) => result.and(shutdown),
         Err(panic) => std::panic::resume_unwind(panic),
@@ -323,7 +323,7 @@ mod tests {
         };
         assert_eq!(
             decode(&source, &cancelled, 1024).unwrap_err().code,
-            "ASTRA_EMU_ARTEMIS_AUDIO_MIXER"
+            "SHINKI_EMU_ARTEMIS_AUDIO_MIXER"
         );
     }
 }
