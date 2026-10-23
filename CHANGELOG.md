@@ -16,6 +16,7 @@
 
 ### 新增
 
+- Rust `HostResources::mount_pfs_with_extra` 支持显式选择归档根内的单文件补丁；使用原生 PFS reader 验证身份与条目边界，在原活动数字卷之后覆盖，不重命名源文件、不扫描备份、不改变默认挂载。路径上限 4096 字节，拒绝越界、设备路径及已活动的归档。
 - 新增 `art3m1s_get_api_v1` 版本化 C ABI 函数表：宿主只查询一次，按 `struct_size`、`abi_version` 和 `magic` 校验后调用；Dart 已开始用该表承接 host events、文件挂载和 runtime 主循环。
 - 新增 runtime FFmpeg 视频会话与 `art3m1s_runtime_set_runtime_media_enabled`：运行时解码 YUV420P、按 PTS 投递，并由 GL/Metal 在 GPU 上转换为可采样视频纹理。
 - 新增 callback-free host events v1：日志、media、UI、字体、窗口状态和文本替换改为拉取/推送接口，宿主不再需要向 core 保存 Dart callback trampoline。

@@ -22,11 +22,8 @@ impl CoreRuntime {
     pub(super) fn render_current_frame(
         &mut self,
         profile: &mut crate::profiler::FrameProfile,
-    ) -> Option<RenderRegion> {
-        if let Err(error) = self.gpu.begin_frame(FrameTarget::Main) {
-            crate::core_warn!("[runtime] begin GPU frame failed: {error}");
-            return None;
-        }
+    ) -> Result<Option<RenderRegion>, String> {
+        self.gpu.begin_frame(FrameTarget::Main)?;
 
         // 转场捕获：在渲染新帧前，若合成器需要捕捉旧画面，则从当前 FBO 读取
         let pipeline = RenderPipeline::new(&self.compositor);
@@ -56,7 +53,6 @@ impl CoreRuntime {
             }
             profile.transition_capture_ns = crate::profiler::FrameProfile::elapsed(capture_started);
         }
-        drop(pipeline);
 
         let build_started = profile.mark();
         // glyph 点击等待图标：进入点击等待（Generic/Generic0）且文本已全部显出时，
@@ -78,7 +74,7 @@ impl CoreRuntime {
                 record_render_region(profile, region, self.stage_w, self.stage_h);
             }
             self.gpu.end_frame();
-            return cleared_debug_overlay;
+            return Ok(cleared_debug_overlay);
         }
 
         // Backlog and text metrics can only change along the full visual path.
@@ -105,7 +101,7 @@ impl CoreRuntime {
                 record_render_region(profile, region, self.stage_w, self.stage_h);
             }
             self.gpu.end_frame();
-            return cleared_debug_overlay;
+            return Ok(cleared_debug_overlay);
         }
 
         let opaque_textures = self
@@ -143,7 +139,7 @@ impl CoreRuntime {
                 self.last_rendered_scene = Some(self.compositor.scene_snapshot());
                 self.last_rendered_clock_ms = self.compositor.clock_ms();
                 self.gpu.end_frame();
-                return cleared_debug_overlay;
+                return Ok(cleared_debug_overlay);
             }
             DamageDecision::Partial(damage) if visualize_damage => {
                 self.gpu.render_damage_visualized(&frame, damage)
@@ -160,10 +156,23 @@ impl CoreRuntime {
         self.last_rendered_clock_ms = self.compositor.clock_ms();
 
         self.gpu.end_frame();
-        Some(repaint_region)
+        Ok(Some(repaint_region))
     }
 
     pub(super) fn read_current_frame_into(&mut self, out_pixels: &mut [u8]) -> usize {
+        match self.try_read_current_frame_into(out_pixels) {
+            Ok(written) => written,
+            Err(error) => {
+                crate::core_warn!("[runtime] GPU readback failed: {error}");
+                0
+            }
+        }
+    }
+
+    pub(super) fn try_read_current_frame_into(
+        &mut self,
+        out_pixels: &mut [u8],
+    ) -> Result<usize, String> {
         let render_size = self
             .gpu
             .render_dimensions()
@@ -171,27 +180,16 @@ impl CoreRuntime {
                 dimensions.render_size
             });
         if render_size == Extent2D::new(self.stage_w, self.stage_h) {
-            return match self
+            return self
                 .gpu
-                .readback(FrameTarget::Main, render_size, out_pixels)
-            {
-                Ok(written) => written,
-                Err(error) => {
-                    crate::core_warn!("[runtime] GPU readback failed: {error}");
-                    0
-                }
-            };
+                .readback(FrameTarget::Main, render_size, out_pixels);
         }
-
-        let Ok(scene) = self.gpu.readback_owned(FrameTarget::Main, render_size) else {
-            crate::core_warn!("[runtime] scaled SceneColor readback failed");
-            return 0;
-        };
-        let Some(expected) = Extent2D::new(self.stage_w, self.stage_h).rgba8_len() else {
-            return 0;
-        };
+        let scene = self.gpu.readback_owned(FrameTarget::Main, render_size)?;
+        let expected = Extent2D::new(self.stage_w, self.stage_h)
+            .rgba8_len()
+            .ok_or_else(|| "stage RGBA8 length overflow".to_string())?;
         if out_pixels.len() < expected {
-            return 0;
+            return Err("frame output buffer is too small".into());
         }
         if !resize_rgba_linear(
             &scene,
@@ -199,10 +197,9 @@ impl CoreRuntime {
             &mut out_pixels[..expected],
             Extent2D::new(self.stage_w, self.stage_h),
         ) {
-            crate::core_warn!("[runtime] scaled SceneColor has an invalid RGBA8 length");
-            return 0;
+            return Err("scaled SceneColor has an invalid RGBA8 length".into());
         }
-        expected
+        Ok(expected)
     }
 
     /// 用上一帧场景重建转场源画面。

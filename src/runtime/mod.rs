@@ -151,6 +151,7 @@ pub struct CoreRuntime {
     pending_message_text: Option<crate::save::MessageTextSnapshot>,
     /// 已读记录自上次持久化后是否有新增（syssave 时落 aread.dat）。
     read_dirty: bool,
+    timeline_reset: bool,
     profiler: crate::profiler::RuntimeProfiler,
 }
 
@@ -162,6 +163,11 @@ struct PendingLoadResume {
 }
 
 impl CoreRuntime {
+    /// Consume a successful load/restart notification once.
+    pub fn take_timeline_reset(&mut self) -> bool {
+        std::mem::take(&mut self.timeline_reset)
+    }
+
     #[cfg(feature = "ffmpeg")]
     pub fn set_runtime_media_enabled(&mut self, enabled: bool) {
         self.media_session.set_enabled(enabled);
@@ -354,6 +360,7 @@ impl CoreRuntime {
             pending_load_resume: None,
             pending_message_text: None,
             read_dirty: false,
+            timeline_reset: false,
             profiler: crate::profiler::RuntimeProfiler::new(),
         })
     }
@@ -396,13 +403,17 @@ impl CoreRuntime {
         if out_pixels.len() < self.pixel_buffer_size() {
             return 0;
         }
-
         let mut profile = self.begin_profile_frame();
-        // The backend preserves any host graphics state before runtime work.
         self.gpu.begin_access();
-
         self.advance_logic(delta_ms, &mut profile);
-        let written = if self.render_current_frame(&mut profile).is_some() {
+        let repaint = match self.render_current_frame(&mut profile) {
+            Ok(repaint) => repaint,
+            Err(error) => {
+                crate::core_warn!("[runtime] begin GPU frame failed: {error}");
+                None
+            }
+        };
+        let written = if repaint.is_some() {
             let started = profile.mark();
             let written = self.read_current_frame_into(out_pixels);
             profile.readback_ns = crate::profiler::FrameProfile::elapsed(started);
@@ -410,17 +421,46 @@ impl CoreRuntime {
         } else {
             0
         };
-        // A render attempt consumes all visual invalidations accumulated by
-        // earlier logic-only ticks, even when the rebuilt draw list is equal.
         self.frame_visual_dirty = false;
         self.clear_input_edges();
-
-        // Restore the host graphics state after backend work.
         self.gpu.collect_retired_resources();
         self.gpu.end_access();
         self.finish_profile_frame(&mut profile);
-
         written
+    }
+
+    /// Submit native GPU rendering without allocating/capturing CPU pixels.
+    pub fn try_advance_frame(&mut self, delta_ms: u64) -> Result<bool, String> {
+        let mut profile = self.begin_profile_frame();
+        self.gpu.begin_access();
+        self.advance_logic(delta_ms, &mut profile);
+        let result = self
+            .render_current_frame(&mut profile)
+            .map(|region| region.is_some());
+        if result.is_ok() {
+            self.frame_visual_dirty = false;
+        }
+        self.clear_input_edges();
+        self.gpu.collect_retired_resources();
+        self.gpu.end_access();
+        self.finish_profile_frame(&mut profile);
+        result
+    }
+
+    /// Capture the latest completed native target without advancing VM/events.
+    pub fn try_capture_frame_into(&mut self, out_pixels: &mut [u8]) -> Result<usize, String> {
+        let expected = self.pixel_buffer_size();
+        if out_pixels.len() < expected {
+            return Err("frame output buffer is too small".into());
+        }
+        self.gpu.begin_access();
+        let result = self.try_read_current_frame_into(out_pixels);
+        self.gpu.end_access();
+        let written = result?;
+        if written != expected {
+            return Err("GPU readback did not produce the complete frame".into());
+        }
+        Ok(written)
     }
 
     /// Configures a host-owned output surface as the presentation target.
@@ -447,17 +487,15 @@ impl CoreRuntime {
         let mut profile = self.begin_profile_frame();
         self.gpu.begin_access();
         self.advance_logic(delta_ms, &mut profile);
-        let repaint = self.render_current_frame(&mut profile);
-        let result = if let Some(repaint) = repaint {
-            (|| {
-                let present_started = profile.mark();
-                self.gpu.present(repaint.damage())?;
-                profile.present_ns = crate::profiler::FrameProfile::elapsed(present_started);
-                Ok(true)
-            })()
-        } else {
-            Ok(false)
-        };
+        let result = (|| {
+            let Some(repaint) = self.render_current_frame(&mut profile)? else {
+                return Ok(false);
+            };
+            let present_started = profile.mark();
+            self.gpu.present(repaint.damage())?;
+            profile.present_ns = crate::profiler::FrameProfile::elapsed(present_started);
+            Ok(true)
+        })();
         if result.is_ok() {
             self.frame_visual_dirty = false;
         }
@@ -1084,3 +1122,7 @@ mod tests {
         assert!(runtime.gpu.clear_damage_overlay(&frame).is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "timeline_tests.rs"]
+mod timeline_tests;

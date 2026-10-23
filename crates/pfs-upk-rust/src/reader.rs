@@ -30,6 +30,30 @@ impl PfsArchive {
         Ok(Self { reader })
     }
 
+    /// Open one standalone archive without discovering sibling byte volumes.
+    pub fn open_standalone_with_encoding(
+        path: &Path,
+        encoding: &'static encoding_rs::Encoding,
+    ) -> io::Result<Self> {
+        let file = std::fs::File::open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a regular archive"));
+        }
+        let reader = Pf8Reader::open_reader_with_encoding(Box::new(file), Some(encoding))
+            .map_err(io::Error::other)?;
+        for entry in reader.entries() {
+            let end = u64::from(entry.offset()) + u64::from(entry.size());
+            if end > metadata.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "standalone archive entry exceeds file bounds",
+                ));
+            }
+        }
+        Ok(Self { reader })
+    }
+
     /// 按路径查找条目（大小写不敏感、`\` 与 `/` 等价）。
     pub fn find(&self, path: &str) -> Option<&Pf8Entry> {
         self.reader.get_entry(path)

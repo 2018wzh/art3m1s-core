@@ -21,7 +21,7 @@ impl<T: Read + Seek + Send> ReadSeek for T {}
 /// 条目查找键：统一小写（大小写不敏感，与引擎历史行为一致）。
 /// （art3m1s 本地改动：上游是区分大小写的精确匹配。）
 fn entry_key(path: &str) -> String {
-    path.to_lowercase()
+    path.replace("\\", "/").to_lowercase()
 }
 
 /// Optimized reader for PF6/PF8 archives with minimal memory usage
@@ -76,7 +76,13 @@ impl Pf8Reader {
         let index_size = format::read_u32_le(&header_buffer, format::offsets::INDEX_SIZE)?;
 
         // Read the entire index into memory
-        let total_index_size = format::offsets::INDEX_DATA_START + index_size as usize;
+        let total_index_size = format::offsets::INDEX_DATA_START
+            .checked_add(index_size as usize)
+            .ok_or_else(|| Error::InvalidFormat("Index size overflow".to_string()))?;
+        let source_size = reader.seek(SeekFrom::End(0))?;
+        if total_index_size as u64 > source_size {
+            return Err(Error::InvalidFormat("Index exceeds archive bounds".to_string()));
+        }
         let mut index_buffer = vec![0u8; total_index_size];
         reader.seek(SeekFrom::Start(0))?;
         reader.read_exact(&mut index_buffer)?;
