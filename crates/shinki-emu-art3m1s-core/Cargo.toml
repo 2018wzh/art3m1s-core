@@ -15,12 +15,12 @@ default = []
 static-core = []
 
 [dependencies]
-shinki-emu-abi = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577", features = ["diagnostic-bridge"] }
+shinki-emu-abi = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "9cd899babbb54cbc84c3e9fbddfe192c2f9200c8", features = ["diagnostic-bridge"] }
 art3m1s-core = { path = "../..", default-features = false, features = ["ffmpeg"] }
 encoding_rs = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-shinki-emu-sdk = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577", default-features = false, features = ["audio"] }
+shinki-emu-sdk = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "9cd899babbb54cbc84c3e9fbddfe192c2f9200c8", default-features = false, features = ["audio"] }
 kira = { version = "=0.12.2", default-features = false, features = ["cpal"] }
 tracing = "0.1"
 parking_lot = "0.12"
@@ -35,7 +35,7 @@ art3m1s-core = { path = "../..", default-features = false, features = ["metal-ba
 tempfile = "3"
 
 [build-dependencies]
-shinki-emu-build = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "035155c78761768bc088169a4eca982f82e9d577" }
+shinki-emu-build = { git = "https://github.com/Project-Shinkirou/ShinkiEMU", rev = "9cd899babbb54cbc84c3e9fbddfe192c2f9200c8" }
 
 [package.metadata.shinki]
 upstream = "https://github.com/Alphaly2K/art3m1s-core"
